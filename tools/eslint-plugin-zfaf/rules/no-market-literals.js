@@ -71,6 +71,9 @@ module.exports = {
         (prefix) => filename.includes(`/${prefix}/`) || filename.startsWith(`${prefix}/`),
       ) ||
       /\.(test|spec)\.[cm]?[jt]sx?$/.test(filename) ||
+      // Test code and its helpers must be able to name concrete markets; that
+      // is the point of the second-market isolation test.
+      /\/tests?\//.test(filename) ||
       filename.includes('/__fixtures__/') ||
       filename.includes('/fixtures/');
 

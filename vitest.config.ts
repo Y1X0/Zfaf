@@ -4,7 +4,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['{packages,apps,tools}/*/**/*.{test,spec}.{ts,tsx,mjs}'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/e2e/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.next/**',
+      '**/e2e/**',
+      'packages/*/tests/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

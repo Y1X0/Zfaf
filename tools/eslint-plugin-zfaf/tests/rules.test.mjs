@@ -136,6 +136,11 @@ ruleTester.run('no-market-literals', noMarketLiterals, {
       code: 'const c = "SAR";',
       filename: '/repo/packages/core/src/billing/price.test.ts',
     },
+    // …and so are test helpers, which build the fixtures.
+    {
+      code: 'const tz = "Asia/Riyadh";',
+      filename: '/repo/packages/db/tests/helpers/database.ts',
+    },
   ],
   invalid: [
     {

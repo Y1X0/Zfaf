@@ -87,6 +87,54 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+  # Integration tests run against a real PostgreSQL. Partial unique indexes,
+  # immutability triggers and transaction isolation have no meaningful mock —
+  # a fake would report success for exactly the cases most likely to be wrong.
+  integration:
+    name: Integration tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zfaf
+          POSTGRES_PASSWORD: zfaf_ci
+          POSTGRES_DB: zfaf
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U zfaf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://zfaf:zfaf_ci@127.0.0.1:5432/zfaf?schema=public
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @zfaf/db db:generate
+
+      # Applies every migration from an empty database — the same path a new
+      # environment takes, not just the current schema.
+      - name: Apply migrations
+        run: pnpm --filter @zfaf/db db:deploy
+
+      - name: Integration tests
+        run: pnpm test:integration
+
   # Proves the architectural guardrails actually fail the build. A rule that is
   # configured but not verified is a rule nobody knows is broken.
   guardrails:

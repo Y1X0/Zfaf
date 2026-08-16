@@ -1,0 +1,724 @@
+// Zfaf — Phase 1 database schema.
+//
+// Modelling rules (docs/03-database-erd.md §1):
+//   • UUIDv7 primary keys — time-ordered, so B-tree inserts stay sequential,
+//     while remaining unguessable (unlike a serial, which leaks a counter).
+//   • timestamptz everywhere, UTC in storage. The one exception is the wedding
+//     time, stored as local wall-clock plus IANA zone (§4.3).
+//   • Soft delete only where the domain justifies recovery.
+//   • Money as an integer in minor units plus a currency. Never a float.
+//   • Indexes follow real access patterns, listed above each one.
+//
+// Tables intentionally absent in Phase 1: payments, webhook_events, guests,
+// reports, custom_domains, analytics_daily, tax_rules. Adding a table "just in
+// case" is how a schema becomes unreadable.
+
+generator client {
+  provider = "prisma-client-js"
+
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  customer
+  planner
+  support
+  admin
+  superadmin
+}
+
+enum UserStatus {
+  active
+  suspended
+  pending_deletion
+}
+
+model User {
+  id String @id @db.Uuid
+
+  // citext so "Ahmad@x.com" and "ahmad@x.com" cannot become two accounts.
+  email           String    @unique @db.Citext
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+
+  // Null for OAuth-only accounts. argon2id, never bcrypt.
+  passwordHash String? @map("password_hash")
+
+  name   String?
+  locale String @default("ar")
+
+  // Which market's configuration applies to this user (ADR-0015).
+  marketCode String @default("SA") @map("market_code") @db.Char(2)
+
+  role   UserRole   @default(customer)
+  status UserStatus @default(active)
+
+  suspendedReason String?   @map("suspended_reason")
+  suspendedAt     DateTime? @map("suspended_at") @db.Timestamptz(3)
+
+  // Starts the 30-day recovery window (docs/09 §8).
+  deletionRequestedAt DateTime? @map("deletion_requested_at") @db.Timestamptz(3)
+
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(3)
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz(3)
+
+  storageUsedBytes BigInt @default(0) @map("storage_used_bytes")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions            Session[]
+  oauthAccounts       OauthAccount[]
+  emailVerifications  EmailVerification[]
+  passwordResets      PasswordReset[]
+  invitations         Invitation[]           @relation("InvitationOwner")
+  memberships         InvitationMember[]
+  publishedVersions   InvitationVersion[]    @relation("PublishedBy")
+  mediaAssets         MediaAsset[]
+  subscriptions       Subscription[]
+  entitlementOverride EntitlementOverride[]
+
+  // Dashboard listing and the retention job.
+  @@index([status])
+  @@index([deletionRequestedAt])
+  @@map("users")
+}
+
+model Session {
+  id     String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // SHA-256 of the token, never the token. A database leak yields no sessions.
+  tokenHash Bytes @unique @map("token_hash")
+
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+  // Salted hash, for hijack detection and the "my devices" screen only.
+  ipHash     Bytes?    @map("ip_hash")
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // "Sign out everywhere", and the expired-session sweep.
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model OauthAccount {
+  id                String @id @db.Uuid
+  userId            String @map("user_id") @db.Uuid
+  provider          String
+  providerAccountId String @map("provider_account_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+model EmailVerification {
+  id        String    @id @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash Bytes     @unique @map("token_hash")
+  email     String    @db.Citext
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verifications")
+}
+
+model PasswordReset {
+  id        String    @id @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash Bytes     @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Templates (ADR-0004)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TemplateStatus {
+  draft
+  published
+  deprecated
+}
+
+model Template {
+  id  String @id @db.Uuid
+  key String @unique
+
+  nameI18n        Json           @map("name_i18n")
+  descriptionI18n Json           @map("description_i18n")
+  category        String
+  previewImageKey String?        @map("preview_image_key")
+  // Compared numerically. Never branched on by plan name (ADR-0014).
+  requiredPlanLevel Int          @default(0) @map("required_plan_level")
+  status          TemplateStatus @default(draft)
+  sortOrder       Int            @default(0) @map("sort_order")
+
+  currentVersionId String? @map("current_version_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  versions    TemplateVersion[]
+  invitations Invitation[]
+
+  // Template gallery: published templates in display order.
+  @@index([status, sortOrder])
+  @@map("templates")
+}
+
+model TemplateVersion {
+  id         String @id @db.Uuid
+  templateId String @map("template_id") @db.Uuid
+  version    Int
+
+  // Untrusted data, validated by TemplateManifestSchema before use (ADR-0004).
+  manifest         Json
+  manifestChecksum String  @map("manifest_checksum")
+  changelog        String?
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  template           Template            @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  invitationVersions InvitationVersion[]
+
+  @@unique([templateId, version])
+  @@map("template_versions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invitations
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum InvitationStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  EXPIRED
+  SUSPENDED
+  DELETED
+}
+
+// UNLISTED is not private (ADR-0017). Anyone holding the link can open it; the
+// distinction is surfaced to the user in explicit UI copy.
+enum InvitationVisibility {
+  UNLISTED
+  INDEXED
+  PROTECTED
+}
+
+model Invitation {
+  id      String @id @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+
+  // Unique only among live invitations — see the partial index in the
+  // migration. citext so case cannot create two invitations at one URL.
+  slug  String? @db.Citext
+  title String
+
+  status InvitationStatus @default(DRAFT)
+
+  templateId        String @map("template_id") @db.Uuid
+  templateVersionId String @map("template_version_id") @db.Uuid
+
+  locale     String @default("ar")
+  marketCode String @default("SA") @map("market_code") @db.Char(2)
+
+  // Local wall-clock plus IANA zone, never a UTC instant (docs/03 §4.3).
+  eventDate      DateTime @map("event_date") @db.Date
+  eventStartTime String?  @map("event_start_time")
+  eventEndTime   String?  @map("event_end_time")
+  timezone       String
+
+  // The editable document. Read and written as a whole by the builder, so a
+  // single JSONB column beats twelve child tables (docs/03 §3.3).
+  draftDocument Json @map("draft_document")
+  // Optimistic concurrency for autosave; guards against lost updates.
+  draftVersion  Int  @default(1) @map("draft_version")
+
+  // Points at the immutable snapshot guests see. Null means never published.
+  publishedVersionId String? @unique @map("published_version_id") @db.Uuid
+
+  visibility InvitationVisibility @default(UNLISTED)
+  // Optional password protection arrives with PROTECTED in a later phase.
+  passwordHash String? @map("password_hash")
+
+  rsvpEnabled  Boolean   @default(true) @map("rsvp_enabled")
+  rsvpDeadline DateTime? @map("rsvp_deadline") @db.Date
+  // Enforced server-side on every submission; never trusted from the client.
+  maxPartySize Int       @default(5) @map("max_party_size")
+
+  // Denormalised counters. RSVP counters are updated in the same transaction as
+  // the response, so they are exact; views are flushed periodically (§4.4).
+  viewCount      BigInt @default(0) @map("view_count")
+  rsvpYesCount   Int    @default(0) @map("rsvp_yes_count")
+  rsvpNoCount    Int    @default(0) @map("rsvp_no_count")
+  rsvpGuestCount Int    @default(0) @map("rsvp_guest_count")
+
+  suspendedReason String?   @map("suspended_reason")
+  expiresAt       DateTime? @map("expires_at") @db.Timestamptz(3)
+  publishedAt     DateTime? @map("published_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  owner           User               @relation("InvitationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  template        Template           @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  versions        InvitationVersion[]
+  members         InvitationMember[]
+  events          Event[]
+  rsvps           Rsvp[]
+  slugHistory     SlugHistory[]
+  mediaAssets     MediaAsset[]
+  analyticsEvents AnalyticsEvent[]
+
+  // Dashboard list: an owner's invitations, newest first.
+  @@index([ownerId, status, createdAt])
+  // The nightly expiry job.
+  @@index([expiresAt])
+  @@index([eventDate])
+  @@map("invitations")
+}
+
+/// Immutable published snapshots (ADR-0005).
+///
+/// Never updated or deleted while the invitation lives. A database trigger
+/// added in the migration rejects UPDATE and DELETE, because types and frozen
+/// objects say nothing about a stray SQL statement.
+model InvitationVersion {
+  id            String @id @db.Uuid
+  invitationId  String @map("invitation_id") @db.Uuid
+  versionNumber Int    @map("version_number")
+
+  // Fully self-contained: rendering it requires no further lookups, which is
+  // what keeps the public page to a single indexed read.
+  publishedDocument Json   @map("published_document")
+  documentChecksum  String @map("document_checksum")
+
+  templateVersionId String @map("template_version_id") @db.Uuid
+  publishedById     String @map("published_by") @db.Uuid
+
+  publishedAt DateTime @default(now()) @map("published_at") @db.Timestamptz(3)
+
+  invitation      Invitation      @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  templateVersion TemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  publishedBy     User            @relation("PublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+
+  @@unique([invitationId, versionNumber])
+  @@index([invitationId, publishedAt])
+  @@map("invitation_versions")
+}
+
+enum MembershipRole {
+  owner
+  editor
+  viewer
+}
+
+/// Collaboration is a Phase 3 feature, but the table exists now on purpose:
+/// adding multi-member access later would mean rewriting every authorization
+/// query in the system. Creating it up front costs one table and makes the
+/// authorization layer correct from the start (docs/03 §3.3).
+model InvitationMember {
+  id           String         @id @db.Uuid
+  invitationId String         @map("invitation_id") @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  role         MembershipRole
+  invitedById  String?        @map("invited_by") @db.Uuid
+  acceptedAt   DateTime?      @map("accepted_at") @db.Timestamptz(3)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([invitationId, userId])
+  // "Which invitations can this user reach?" — every scoped read.
+  @@index([userId])
+  @@map("invitation_members")
+}
+
+/// Old slugs, so links already sent keep resolving (ADR-0013).
+///
+/// Without this, renaming a slug silently breaks a link already in 250 WhatsApp
+/// threads, and those messages cannot be recalled.
+model SlugHistory {
+  id           String   @id @db.Uuid
+  invitationId String   @map("invitation_id") @db.Uuid
+  oldSlug      String   @unique @db.Citext
+  changedAt    DateTime @default(now()) @map("changed_at") @db.Timestamptz(3)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  @@index([invitationId])
+  @@map("slug_history")
+}
+
+/// Reserved slugs, as data rather than a hard-coded list, so the set can grow
+/// without a deploy. Mirrored in the domain for fast local validation.
+model ReservedSlug {
+  slug   String @id @db.Citext
+  reason String
+
+  @@map("reserved_slugs")
+}
+
+enum EventType {
+  contract
+  reception
+  wedding
+  dinner
+  custom
+}
+
+/// A real table rather than JSON, because these are queried: reminders,
+/// chronological ordering, calendar export. That is the line — JSONB for what
+/// is read as a block, tables for what is queried (docs/03 §3.3).
+model Event {
+  id           String    @id @db.Uuid
+  invitationId String    @map("invitation_id") @db.Uuid
+  type         EventType
+  titleI18n    Json      @map("title_i18n")
+  descriptionI18n Json?  @map("description_i18n")
+
+  eventDate DateTime @map("event_date") @db.Date
+  startTime String?  @map("start_time")
+  endTime   String?  @map("end_time")
+  timezone  String
+
+  venueName    String? @map("venue_name")
+  venueAddress String? @map("venue_address")
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(10, 6)
+  // Validated against an allowlist of map hosts before it is stored.
+  mapsUrl      String? @map("maps_url")
+
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  @@index([invitationId, sortOrder])
+  @@map("events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Media (ADR-0007)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum MediaKind {
+  image
+  audio
+}
+
+enum MediaStatus {
+  pending
+  processing
+  ready
+  failed
+  quarantined
+}
+
+enum ScanStatus {
+  pending
+  clean
+  infected
+  skipped
+}
+
+model MediaAsset {
+  id           String  @id @db.Uuid
+  ownerId      String  @map("owner_id") @db.Uuid
+  invitationId String? @map("invitation_id") @db.Uuid
+
+  kind    MediaKind
+  purpose String
+
+  // Server-generated. The user's filename never appears in the key.
+  storageKey       String @unique @map("storage_key")
+  // Kept for display only, sanitised.
+  originalFilename String @map("original_filename")
+
+  // Verified from magic bytes, not from the client's Content-Type header.
+  mimeType  String @map("mime_type")
+  sizeBytes BigInt @map("size_bytes")
+
+  width      Int?
+  height     Int?
+  durationMs Int? @map("duration_ms")
+  // Renders instantly as a placeholder, so images cause no layout shift.
+  blurhash   String?
+
+  // Generated derivatives: {"thumb":{...},"medium":{...},"full":{...}}
+  variants Json @default("{}")
+
+  status     MediaStatus @default(pending)
+  scanStatus ScanStatus  @default(pending) @map("scan_status")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  owner      User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  invitation Invitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+
+  // The owner's media library.
+  @@index([ownerId, createdAt])
+  @@index([invitationId])
+  // The stuck-upload sweep.
+  @@index([status])
+  @@map("media_assets")
+}
+
+/// Licensed platform music (ADR-0012).
+///
+/// `licenseProofUrl` is the archived licence document. Nothing enters this
+/// table without one — it is our evidence if a claim is ever made.
+model MusicTrack {
+  id       String @id @db.Uuid
+  titleI18n Json  @map("title_i18n")
+  artist   String
+
+  storageKey String @unique @map("storage_key")
+  durationMs Int    @map("duration_ms")
+
+  licenseType         String  @map("license_type")
+  licenseUrl          String  @map("license_url")
+  licenseProofUrl     String  @map("license_proof_url")
+  attributionRequired Boolean @default(false) @map("attribution_required")
+  attributionText     String? @map("attribution_text")
+
+  requiredPlanLevel Int     @default(0) @map("required_plan_level")
+  mood              String?
+  isActive          Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([isActive, requiredPlanLevel])
+  @@map("music_tracks")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RSVP
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Guest responses.
+///
+/// This is third-party personal data: guests never agreed to our terms and do
+/// not know we exist. It is collected minimally, retained briefly, and is not
+/// readable by platform staff (docs/09 §3.3).
+model Rsvp {
+  id           String @id @db.Uuid
+  invitationId String @map("invitation_id") @db.Uuid
+
+  name      String
+  attending Boolean
+  partySize Int     @default(1) @map("party_size")
+  phone     String?
+  note      String?
+
+  // sha256(invitation_id ‖ normalised name ‖ normalised phone). A guest who
+  // double-taps submit on a slow connection updates their response instead of
+  // creating a duplicate that corrupts the count.
+  dedupeHash Bytes @map("dedupe_hash")
+
+  // Lets a guest correct their own response without an account.
+  editTokenHash Bytes? @map("edit_token_hash")
+
+  source String @default("public")
+
+  submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  @@unique([invitationId, dedupeHash])
+  // The RSVP dashboard, newest first.
+  @@index([invitationId, submittedAt])
+  @@index([invitationId, attending])
+  @@map("rsvps")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Billing (ADR-0014) — no gateway in Phase 1, but the boundaries exist.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Plan {
+  id    String @id @db.Uuid
+  key   String @unique
+  level Int    @default(0)
+
+  nameI18n Json @map("name_i18n")
+
+  // Minor units plus currency. Null price = free (ADR-0015).
+  priceAmount   Int?    @map("price_amount")
+  currency      String? @db.Char(3)
+  billingPeriod String? @map("billing_period")
+
+  // Features and limits are data: a new plan is a row, not a code change.
+  limits Json @default("{}")
+
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscriptions Subscription[]
+
+  @@index([isActive, sortOrder])
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  expired
+}
+
+model Subscription {
+  id     String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+
+  // Set when the purchase is tied to one invitation rather than the account —
+  // the common shape here, since couples buy once.
+  invitationId String? @map("invitation_id") @db.Uuid
+
+  status SubscriptionStatus @default(active)
+
+  currentPeriodStart DateTime  @map("current_period_start") @db.Timestamptz(3)
+  currentPeriodEnd   DateTime? @map("current_period_end") @db.Timestamptz(3)
+  cancelAtPeriodEnd  Boolean   @default(false) @map("cancel_at_period_end")
+
+  // 'null' until a gateway is integrated (ADR-0008).
+  provider               String  @default("null")
+  providerSubscriptionId String? @map("provider_subscription_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  // Entitlement resolution: the user's active subscription.
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+/// Per-user grants that override the plan: trials, goodwill, partnerships.
+/// Without this, every exception becomes a special case in code (ADR-0014).
+model EntitlementOverride {
+  id     String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Exactly one is set; a check constraint in the migration enforces that.
+  feature  String?
+  limitKey String? @map("limit_key")
+
+  numericValue Int?     @map("numeric_value")
+  boolValue    Boolean? @map("bool_value")
+
+  reason     String
+  grantedById String?   @map("granted_by") @db.Uuid
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("entitlement_overrides")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analytics (ADR-0009) — MVP scope only: views, uniques, device class.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AnalyticsEvent {
+  id           BigInt @id @default(autoincrement())
+  invitationId String @map("invitation_id") @db.Uuid
+
+  type String
+
+  // sha256(daily_salt ‖ ip ‖ user-agent ‖ invitation_id). The salt is rotated
+  // every 24h and never persisted, so after a day the hash cannot be linked to
+  // anyone — including by us. No IP address is ever stored.
+  visitorHash Bytes  @map("visitor_hash")
+  deviceClass String @map("device_class")
+
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
+  @@index([invitationId, occurredAt])
+  @@map("analytics_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Append-only. Never updated or deleted; a trigger in the migration enforces
+/// it, because an audit log an operator can edit is not an audit log.
+model AuditLog {
+  id String @id @db.Uuid
+
+  actorId   String? @map("actor_id") @db.Uuid
+  actorType String  @map("actor_type")
+
+  action       String
+  resourceType String @map("resource_type")
+  resourceId   String @map("resource_id")
+
+  // Redacted before write: no secrets, no guest personal data.
+  metadata Json @default("{}")
+
+  ipHash    Bytes?  @map("ip_hash")
+  requestId String? @map("request_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([actorId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("settings")
+}
