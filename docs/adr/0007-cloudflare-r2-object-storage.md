@@ -1,6 +1,6 @@
 # ADR-0007 — Cloudflare R2 كـ Object Storage
 
-**الحالة:** Proposed · **التاريخ:** 2026-08-16
+**الحالة:** ✅ Accepted · **اقتُرح:** 2026-08-16 · **اعتُمد:** 2026-08-16
 
 ## السياق
 
@@ -68,3 +68,53 @@
 - تغيّر تسعير R2 جوهرياً.
 - حاجة لتخزين في منطقة جغرافية محددة لأسباب تنظيمية (سيادة البيانات).
 - حاجة لميزات S3 المتقدمة.
+
+---
+
+## تعديل عند الاعتماد (2026-08-16)
+
+المالك اعتمد R2 **بشرط تجريد إلزامي**: التطبيق لا يُربط بـ R2 إلى الأبد.
+
+### `StorageProvider` — العقد المُلزِم
+
+```typescript
+// packages/core/src/media/ports/storage-provider.ts
+export interface StorageProvider {
+  readonly key: string;                                  // 'r2' | 's3' | 'minio' | ...
+
+  createUploadUrl(input: {
+    key: StorageKey;
+    contentType: string;                                 // ← يُقيَّد في التوقيع
+    maxSizeBytes: number;                                // ← يُقيَّد في التوقيع
+    expiresInSeconds: number;
+  }): Promise<SignedUpload>;
+
+  createSignedDownloadUrl(key: StorageKey, ttlSeconds: number): Promise<string>;
+  head(key: StorageKey): Promise<ObjectMetadata | null>; // الحجم، ETag، النوع الفعلي
+  delete(key: StorageKey): Promise<void>;
+  deletePrefix(prefix: string): Promise<number>;         // لحذف الحساب/الدعوة
+}
+```
+
+**القدرات المطلوبة صراحةً من المالك:**
+
+| القدرة | مكان التنفيذ |
+|--------|---------------|
+| Upload | `createUploadUrl` — رفع مباشر بلا مرور بخادمنا |
+| Delete | `delete` / `deletePrefix` |
+| Signed access | `createSignedDownloadUrl` — للمسودات والمعاينات |
+| Metadata | `head` — **مصدر الحقيقة للحجم والنوع، لا ادعاء العميل** |
+| Content-Type validation | قائمة بيضاء عند طلب الرابط + **magic bytes في الـ worker** |
+| File size limits | مقيّد في توقيع الرابط + مُتحقَّق بـ `head` بعد الرفع |
+| Image optimization | `apps/worker` — Sharp، نسخ AVIF/WebP/JPEG |
+| **EXIF stripping** | `apps/worker` — **إلزامي وغير قابل للتعطيل** |
+
+**قواعد تنفيذ مُلزِمة:**
+- ❌ لا استيراد لـ AWS SDK أو أي عميل R2 خارج `infra/storage/`.
+  → قاعدة `dependency-cruiser` تفشل CI.
+- ✅ `StorageKey` **نوع محدَّد** (branded type) يُبنى من الخادم فقط — لا سلاسل حرة.
+- ✅ التطوير المحلي يستخدم **MinIO** عبر **نفس المحوّل** (S3 API) — يثبت التجريد عملياً.
+- ✅ اختبارات العقد (contract tests) تعمل على المحوّلين معاً بنفس المجموعة.
+
+**نتيجة قابلة للتحقق:** الانتقال من R2 إلى S3 أو Supabase Storage = محوّل جديد
+يحقق نفس الواجهة، بلا مساس بأي منطق أعمال.

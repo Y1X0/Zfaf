@@ -1,6 +1,6 @@
 # ADR-0009 — تحليلات بلا Cookies وبلا تخزين IP
 
-**الحالة:** Proposed · **التاريخ:** 2026-08-16
+**الحالة:** ✅ Accepted · **اقتُرح:** 2026-08-16 · **اعتُمد:** 2026-08-16
 
 ## السياق
 
@@ -85,3 +85,41 @@ const hash = sha256(salt + ip + userAgent + invitationId);
 - `analytics_events` مقسّم شهرياً، احتفاظ 90 يوماً (`DROP PARTITION`).
 - تجميع كل ساعة إلى `analytics_daily` (يُحتفَظ به دائماً، مجهّل بالكامل).
 - عدّاد المشاهدات يُجمَّع في Redis ويُغسَل كل 60 ثانية — لا كتابة DB مع كل مشاهدة.
+
+---
+
+## تعديل عند الاعتماد (2026-08-16) — تقليص نطاق MVP
+
+نموذج الخصوصية معتمد كما هو. لكن المالك قلّص **نطاق ما يُبنى في MVP**:
+
+> *«في MVP نريد Analytics بسيطة فقط. لا نبني Tracking Platform ضخمة.»*
+
+### ما يُبنى في Phase 1 — لا أكثر
+
+```
+✅ Views (إجمالي)
+✅ Unique visitors (بالـ hash اليومي المجهّل)
+✅ RSVP counts
+✅ Basic device information (mobile / tablet / desktop)
+```
+
+### مؤجَّل إلى Phase 2
+
+```
+⏸ تصنيف مصدر الزيارة (referrer_class)
+⏸ تفصيل الدول (country)
+⏸ سلاسل زمنية وتفاصيل الذروة
+⏸ أحداث دقيقة (maps_click, music_play, gallery_open, share)
+⏸ جدول analytics_daily والمهمة المجمّعة
+```
+
+### الأثر على المخطط
+
+الأعمدة المؤجّلة (`country`, `referrer_class`) **لا تُنشأ في Phase 1**.
+إضافتها لاحقاً عملية `EXPAND` بسيطة (عمود nullable) وفق نمط الترحيل المعتمد في
+[03-database-erd.md §5](../03-database-erd.md#5-استراتيجية-الـ-migrations).
+
+في Phase 1 يقرأ الـ Dashboard مباشرة من `analytics_events` بتجميع بسيط —
+حجم البيانات لا يبرر جدولاً مجمّعاً بعد. `analytics_daily` يُضاف عند ظهور الحاجة القياسية.
+
+**المبدأ محفوظ بالكامل:** لا كوكيز · لا IP مخزَّن · لا PII غير ضروري · ملح يومي غير محفوظ.

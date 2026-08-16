@@ -1,8 +1,8 @@
 # Zfaf — منصة دعوات الزفاف الرقمية التفاعلية
 
-> **حالة المشروع الحالية: Phase 0 — Architecture.**
-> لا يوجد أي production code في هذا المستودع حتى الآن، وهذا مقصود.
-> المخرج الحالي هو وثيقة معمارية كاملة تحتاج مراجعة وموافقة قبل بدء التنفيذ.
+> **حالة المشروع: Phase 0 ✅ معتمدة · Phase 1 ▶️ قيد التنفيذ.**
+> القرارات المعمارية مثبَّتة في [سجل الموافقة](docs/19-decisions-pending-approval.md).
+> التنفيذ يسير حسب [Phase 1 Milestones](docs/20-phase1-milestones.md) — Phase 1 **فقط**.
 
 ---
 
@@ -48,36 +48,41 @@ Publishing + RSVP + Guest Management + Analytics + Payments + Admin.
 | 16 | [Cost Estimate](docs/16-cost-estimate.md) | تكلفة التشغيل على 3 مستويات نمو + Unit economics |
 | 17 | [Roadmap — Phases](docs/17-roadmap-phases.md) | Phase 1/2/3 مع Epics وترتيب التنفيذ |
 | 18 | [Risks Register](docs/18-risks.md) | المخاطر التقنية والتجارية والقانونية + التخفيف |
-| 19 | [**Decisions Pending Approval**](docs/19-decisions-pending-approval.md) | ⚠️ **ابدأ من هنا إن كان وقتك ضيقاً** — 18 قراراً تحتاج موافقتك |
+| 19 | [**Decisions — Record of Approval**](docs/19-decisions-pending-approval.md) | ✅ القرارات المثبَّتة والمعتمدة (مع التعديلات) |
+| 20 | [**Phase 1 Milestones**](docs/20-phase1-milestones.md) | ▶️ **خطة التنفيذ الحالية** — 11 milestone بمعايير خروج |
 
 ### Architecture Decision Records
 
 | ADR | القرار | الحالة |
 |-----|--------|--------|
-| [0001](docs/adr/0001-monorepo-and-modular-monolith.md) | Monorepo + Modular Monolith بدل Microservices | Proposed |
-| [0002](docs/adr/0002-nextjs-fullstack-over-separate-api.md) | Next.js full-stack بدل NestJS/FastAPI منفصل | Proposed |
-| [0003](docs/adr/0003-postgresql-and-prisma.md) | PostgreSQL + Prisma ORM | Proposed |
-| [0004](docs/adr/0004-json-template-manifest.md) | Template = JSON manifest مُتحقَّق بـ Zod (لا React لكل قالب) | Proposed |
-| [0005](docs/adr/0005-published-snapshot-versioning.md) | نشر عبر Immutable Snapshot بدل القراءة الحية | Proposed |
-| [0006](docs/adr/0006-database-sessions-not-jwt.md) | Database sessions في httpOnly cookies بدل JWT | Proposed |
-| [0007](docs/adr/0007-cloudflare-r2-object-storage.md) | Cloudflare R2 كـ Object Storage | Proposed |
-| [0008](docs/adr/0008-payment-provider-abstraction.md) | Payment Provider Port/Adapter + Webhook-driven | Proposed |
-| [0009](docs/adr/0009-cookieless-analytics.md) | Analytics بدون Cookies وبدون تخزين IP | Proposed |
-| [0010](docs/adr/0010-css-first-animations.md) | Animations بالـ CSS أولاً على الصفحة العامة | Proposed |
-| [0011](docs/adr/0011-i18n-and-rtl-strategy.md) | next-intl + CSS Logical Properties للـ RTL | Proposed |
-| [0012](docs/adr/0012-licensed-music-library.md) | مكتبة موسيقى مرخّصة مركزياً + رفع مقيّد | Proposed |
-| [0013](docs/adr/0013-slug-and-reserved-words.md) | Slug namespace تحت `/i/` مع Reserved words | Proposed |
-| [0014](docs/adr/0014-entitlements-over-plan-checks.md) | Entitlements Service بدل `if (plan === 'premium')` | Proposed |
+| [0001](docs/adr/0001-monorepo-and-modular-monolith.md) | Monorepo + Modular Monolith بدل Microservices | ✅ Accepted |
+| [0002](docs/adr/0002-nextjs-fullstack-over-separate-api.md) | Next.js full-stack بدل NestJS/FastAPI منفصل | ✅ Accepted |
+| [0003](docs/adr/0003-postgresql-and-prisma.md) | PostgreSQL + Prisma ORM | ✅ Accepted |
+| [0004](docs/adr/0004-json-template-manifest.md) | Template = JSON manifest مُتحقَّق بـ Zod (لا React لكل قالب) | ✅ Accepted |
+| [0005](docs/adr/0005-published-snapshot-versioning.md) | نشر عبر Immutable Snapshot بدل القراءة الحية | ✅ Accepted |
+| [0006](docs/adr/0006-database-sessions-not-jwt.md) | Database sessions في httpOnly cookies بدل JWT | ✅ Accepted |
+| [0007](docs/adr/0007-cloudflare-r2-object-storage.md) | Cloudflare R2 كـ Object Storage | ✅ Accepted |
+| [0008](docs/adr/0008-payment-provider-abstraction.md) | Payment Provider Port/Adapter + Webhook-driven | ✅ Accepted |
+| [0009](docs/adr/0009-cookieless-analytics.md) | Analytics بدون Cookies وبدون تخزين IP | ✅ Accepted |
+| [0010](docs/adr/0010-css-first-animations.md) | Animations بالـ CSS أولاً على الصفحة العامة | ✅ Accepted |
+| [0011](docs/adr/0011-i18n-and-rtl-strategy.md) | next-intl + CSS Logical Properties للـ RTL | ✅ Accepted |
+| [0012](docs/adr/0012-licensed-music-library.md) | مكتبة موسيقى مرخّصة مركزياً + رفع مقيّد | ✅ Accepted |
+| [0013](docs/adr/0013-slug-and-reserved-words.md) | Slug namespace تحت `/i/` مع Reserved words | ✅ Accepted |
+| [0014](docs/adr/0014-entitlements-over-plan-checks.md) | Entitlements Service بدل `if (plan === 'premium')` | ✅ Accepted |
+| [0015](docs/adr/0015-market-configuration-model.md) | نموذج تكوين السوق — لا ترميز صلب للسعودية | ✅ Accepted |
+| [0016](docs/adr/0016-static-qr-in-mvp.md) | QR ثابت داخل MVP | ✅ Accepted |
+| [0017](docs/adr/0017-invitation-visibility-model.md) | Unlisted ≠ Private — نموذج ظهور الدعوة | ✅ Accepted |
 
 ---
 
-## 🚦 الخطوة التالية
+## 🚦 الحالة الحالية
 
-1. راجع **[docs/19-decisions-pending-approval.md](docs/19-decisions-pending-approval.md)**.
-2. وافق / عدّل القرارات المفتوحة.
-3. عند الموافقة → نبدأ **Phase 1 (MVP)** فقط، حسب [Roadmap](docs/17-roadmap-phases.md).
+Phase 0 معتمدة. التنفيذ جارٍ على **Phase 1 فقط**، milestone تلو الآخر،
+ببوابة خروج إلزامية لكل واحد → **[docs/20-phase1-milestones.md](docs/20-phase1-milestones.md)**.
 
-> ممنوع الانتقال إلى Phase 2 قبل إغلاق Phase 1 واجتياز Definition of Done بالكامل.
+> ⛔ ممنوع أي عمل من Phase 2 أو Phase 3.
+> ⛔ ممنوع الانتقال بين الـ Milestones قبل استيفاء Exit Criteria.
+> 🚦 **بوابة توقف عند M3:** إن احتاج القالب الثالث تعديلاً في الـ Renderer — نتوقف ونراجع المعمارية.
 
 ---
 
