@@ -99,6 +99,10 @@ export default defineConfig({
         'postgresql://zfaf:zfaf_local_dev@127.0.0.1:5432/zfaf?schema=public',
       REDIS_URL: process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379',
       SESSION_SECRET: 'e2e-session-secret-value-at-least-32-characters-long',
+      // A *different* value from the session secret, as production requires:
+      // sharing them would make a routine session-secret rotation invalidate
+      // every enrolled authenticator (docs/09 §2.8).
+      TOTP_ENCRYPTION_KEY: 'e2e-totp-encryption-key-at-least-32-characters-long',
       // `s3` rather than `minio`, because the config layer refuses a local
       // development driver in production and it is right to. Nothing in this
       // suite uploads, so the endpoint is never reached.

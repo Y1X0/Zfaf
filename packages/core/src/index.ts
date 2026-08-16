@@ -75,12 +75,19 @@ export * from './identity/domain/email.js';
 export * from './identity/domain/password-policy.js';
 export * from './identity/domain/account-status.js';
 export * from './identity/domain/session.js';
+export * from './identity/domain/totp.js';
 export * from './identity/ports/password-hasher.js';
 export * from './identity/ports/token-generator.js';
 export * from './identity/ports/rate-limiter.js';
 export * from './identity/ports/identity-repositories.js';
+export * from './identity/ports/two-factor-repository.js';
 export * from './identity/ports/mail-service.js';
 export * from './identity/usecases/authenticate.js';
 export * from './identity/usecases/session-lifecycle.js';
 export * from './identity/usecases/credentials.js';
+export * from './identity/usecases/two-factor.js';
+
+// ── observability (docs/15) ─────────────────────────────────────────────────
+export * from './observability/domain/redaction.js';
+export * from './observability/ports/logger.js';
 export * from './authz/tenant-context.js';

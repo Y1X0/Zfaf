@@ -11,6 +11,8 @@ import type {
   SessionRepository,
   UserRepository,
 } from '../ports/identity-repositories.js';
+import type { TwoFactorRepository } from '../ports/two-factor-repository.js';
+import { type TwoFactorGate, twoFactorGateFor } from './two-factor.js';
 
 /**
  * Turning a cookie into an `Actor`, and ending sessions.
@@ -30,6 +32,14 @@ export interface SessionDependencies {
   readonly sessions: SessionRepository;
   readonly memberships: MembershipRepository;
   readonly audit: AuditLogRepository;
+  /**
+   * Required, not optional, and that is the point.
+   *
+   * An optional second-factor repository is a second-factor check that silently
+   * does nothing wherever somebody forgot to pass it — and the place it gets
+   * forgotten is the place that needed it.
+   */
+  readonly twoFactor: TwoFactorRepository;
   readonly tokens: TokenGenerator;
   readonly clock: Clock;
 }
@@ -50,6 +60,15 @@ export type ResolveSessionResult =
        * is still the person who authenticated. Ordinary routes ignore this.
        */
       readonly sessionStartedAt: Date;
+      /**
+       * Whether this session has satisfied its second factor (docs/09 §2.8).
+       *
+       * Returned rather than enforced here, because exactly two callers must be
+       * able to proceed without it: the challenge endpoint and the enrollment
+       * endpoints. Everything else refuses on anything but `SATISFIED` or
+       * `NOT_REQUIRED` — see `requireActor` in the web app.
+       */
+      readonly twoFactor: TwoFactorGate;
     }
   | { readonly ok: false; readonly reason: ResolveSessionFailure };
 
@@ -91,6 +110,12 @@ export async function resolveSession(
   }
 
   const memberships = await deps.memberships.listForUser(user.id);
+  const credential = await deps.twoFactor.findByUserId(user.id);
+  const twoFactor = twoFactorGateFor({
+    role: user.role,
+    credentialConfirmed: credential?.confirmedAt != null,
+    sessionVerifiedAt: stored.twoFactorVerifiedAt,
+  });
 
   const actor: Actor = {
     kind: 'user',
@@ -104,7 +129,13 @@ export async function resolveSession(
       .map((membership) => ({ invitationId: membership.invitationId, role: membership.role })),
   };
 
-  return { ok: true, actor, sessionId: stored.id, sessionStartedAt: stored.createdAt };
+  return {
+    ok: true,
+    actor,
+    sessionId: stored.id,
+    sessionStartedAt: stored.createdAt,
+    twoFactor,
+  };
 }
 
 export type LogoutResult = { readonly ok: true; readonly revoked: number };

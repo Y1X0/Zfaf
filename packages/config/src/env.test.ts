@@ -8,6 +8,7 @@ const valid: Record<string, string> = {
   DATABASE_URL: 'postgresql://zfaf:pw@localhost:5432/zfaf',
   REDIS_URL: 'redis://localhost:6379',
   SESSION_SECRET: 'x'.repeat(48),
+  TOTP_ENCRYPTION_KEY: 'y'.repeat(48),
   STORAGE_DRIVER: 'minio',
   STORAGE_ENDPOINT: 'http://localhost:9000',
   STORAGE_REGION: 'auto',
@@ -62,6 +63,7 @@ describe('parseEnv', () => {
       NODE_ENV: 'production',
       PUBLIC_BASE_URL: 'https://zfaf.app',
       SESSION_SECRET: 'replace-me-with-at-least-32-characters-of-random',
+      TOTP_ENCRYPTION_KEY: 'z'.repeat(48),
       STORAGE_DRIVER: 'r2',
     };
     expect(() => parseEnv(production)).toThrow(/placeholder/);

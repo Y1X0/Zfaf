@@ -8,6 +8,7 @@ import {
   PrismaMembershipRepository,
   PrismaRsvpRepository,
   PrismaSessionRepository,
+  PrismaTwoFactorRepository,
   PrismaUserRepository,
   getPrismaClient,
 } from '@zfaf/db';
@@ -16,6 +17,7 @@ import {
 // route that signs upload URLs has no use for a password hasher anyway.
 import { S3StorageProvider } from '@zfaf/infra/storage';
 import { NodeIdGenerator, NodeTokenGenerator } from '@zfaf/infra/crypto/tokens';
+import { AesGcmSecretCipher } from '@zfaf/infra/crypto/cipher';
 import { NoopMailService } from '@zfaf/infra/mail';
 import { SlidingWindowRateLimiter } from '@zfaf/infra/rate-limit';
 import { RedisAnalyticsBuffer, RedisDailySalt, getRedis } from '@zfaf/infra/analytics';
@@ -27,6 +29,7 @@ import {
   type MailService,
   NO_CDN_PURGER,
   type RsvpNotification,
+  type SecretCipher,
   systemClock,
 } from '@zfaf/core';
 
@@ -52,6 +55,7 @@ export interface Container {
   readonly users: PrismaUserRepository;
   readonly sessions: PrismaSessionRepository;
   readonly memberships: PrismaMembershipRepository;
+  readonly twoFactor: PrismaTwoFactorRepository;
   readonly audit: PrismaAuditLogRepository;
   readonly invitations: PrismaInvitationRepository;
   readonly rsvps: PrismaRsvpRepository;
@@ -64,6 +68,8 @@ export interface Container {
   readonly cdn: CdnPurger;
   readonly storage: S3StorageProvider;
   readonly tokens: NodeTokenGenerator;
+  /** Encrypts TOTP secrets at rest (docs/09 §2.8). Key from the secret manager. */
+  readonly cipher: SecretCipher;
   readonly ids: NodeIdGenerator;
   readonly rateLimiter: SlidingWindowRateLimiter;
   readonly clock: typeof systemClock;
@@ -85,6 +91,7 @@ export function container(): Container {
     users: new PrismaUserRepository(prisma),
     sessions: new PrismaSessionRepository(prisma),
     memberships: new PrismaMembershipRepository(prisma),
+    twoFactor: new PrismaTwoFactorRepository(prisma),
     audit: new PrismaAuditLogRepository(prisma),
     invitations: new PrismaInvitationRepository(prisma),
     rsvps: new PrismaRsvpRepository(prisma),
@@ -105,6 +112,7 @@ export function container(): Container {
       forcePathStyle: env.STORAGE_DRIVER === 'minio',
     }),
     tokens: new NodeTokenGenerator(),
+    cipher: new AesGcmSecretCipher(env.TOTP_ENCRYPTION_KEY),
     ids: new NodeIdGenerator(),
     rateLimiter: new SlidingWindowRateLimiter(),
     clock: systemClock,

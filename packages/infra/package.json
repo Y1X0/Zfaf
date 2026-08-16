@@ -13,7 +13,8 @@
     "./mail": "./src/mail/index.ts",
     "./qr": "./src/qr/index.ts",
     "./analytics": "./src/analytics/index.ts",
-    "./cdn": "./src/cdn/index.ts"
+    "./cdn": "./src/cdn/index.ts",
+    "./crypto/cipher": "./src/crypto/aes-gcm-cipher.ts"
   },
   "scripts": {
     "lint": "eslint .",

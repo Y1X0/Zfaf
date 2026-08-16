@@ -85,6 +85,8 @@ model User {
   mediaAssets         MediaAsset[]
   subscriptions       Subscription[]
   entitlementOverride EntitlementOverride[]
+  twoFactorCredential TwoFactorCredential?
+  recoveryCodes       TwoFactorRecoveryCode[]
 
   // Dashboard listing and the retention job.
   @@index([status])
@@ -107,6 +109,11 @@ model Session {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   lastUsedAt DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(3)
 
+  // When this browser answered its second-factor challenge (docs/09 §2.8).
+  // On the session, not the user: the question is whether *this* browser
+  // proved possession, and a stolen cookie belongs to one that never did.
+  twoFactorVerifiedAt DateTime? @map("two_factor_verified_at") @db.Timestamptz(3)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // "Sign out everywhere", and the expired-session sweep.
@@ -128,6 +135,48 @@ model OauthAccount {
   @@unique([provider, providerAccountId])
   @@index([userId])
   @@map("oauth_accounts")
+}
+
+/// TOTP second factor (docs/09 §2.8). Mandatory for staff, optional otherwise.
+model TwoFactorCredential {
+  id     String @id @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  /// AES-256-GCM: nonce ‖ ciphertext ‖ tag. The key lives in the secret
+  /// manager, so a database dump alone yields no working second factors.
+  /// This is the one credential that cannot be hashed — verification needs
+  /// the original bytes.
+  secretSealed Bytes @map("secret_sealed")
+
+  /// Null until a correct code proves the authenticator really holds the
+  /// secret. An unconfirmed credential changes nothing about the account.
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(3)
+
+  /// Highest TOTP step already accepted. Replay protection that survives a
+  /// deploy, which in-memory replay protection does not.
+  lastUsedStep BigInt? @map("last_used_step")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("two_factor_credentials")
+}
+
+/// Single-use recovery codes, ten per enrollment, SHA-256 only.
+model TwoFactorRecoveryCode {
+  id       String @id @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  codeHash Bytes  @unique @map("code_hash")
+
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("two_factor_recovery_codes")
 }
 
 model EmailVerification {

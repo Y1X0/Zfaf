@@ -14,6 +14,17 @@ export class NodeTokenGenerator implements TokenGenerator {
     return randomBytes(bytes).toString('base64url');
   }
 
+  /**
+   * Raw CSPRNG bytes, for a credential that is bytes rather than text.
+   *
+   * A TOTP secret derived from `generate()` would carry only the entropy of a
+   * base64url string of that length, and the base32 an authenticator reads
+   * would be an encoding of an encoding.
+   */
+  randomBytes(count: number): Uint8Array {
+    return new Uint8Array(randomBytes(count));
+  }
+
   hash(token: string): Uint8Array {
     return new Uint8Array(createHash('sha256').update(token, 'utf8').digest());
   }

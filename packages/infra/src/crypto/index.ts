@@ -9,3 +9,4 @@
  */
 export * from './argon2-password-hasher.js';
 export * from './node-token-generator.js';
+export * from './aes-gcm-cipher.js';

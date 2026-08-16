@@ -13,3 +13,4 @@ export * from './repositories/media.repository.js';
 export * from './repositories/rsvp.repository.js';
 export * from './repositories/analytics.repository.js';
 export * from './repositories/admin.repository.js';
+export * from './repositories/two-factor.repository.js';

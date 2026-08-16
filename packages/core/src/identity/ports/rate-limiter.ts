@@ -36,6 +36,22 @@ export const RATE_LIMITS = {
   passwordResetPerAccount: { limit: 3, windowMs: 60 * 60 * 1000 },
   passwordResetPerIp: { limit: 5, windowMs: 60 * 60 * 1000 },
   verificationResendPerAccount: { limit: 2, windowMs: 60 * 60 * 1000 },
+
+  /**
+   * Second-factor guessing (docs/09 §2.8).
+   *
+   * A six-digit code is a million possibilities, and the ±1-step window makes
+   * three of them valid at any instant — so an unthrottled endpoint falls to
+   * roughly 333,000 requests, which is minutes of scripted traffic. These
+   * limits are what turn that into years.
+   *
+   * Per session **and** per account, layered for the same reason sign-in is: a
+   * per-session limit alone is defeated by signing in again for a fresh
+   * session, and only the per-account limit sees that.
+   */
+  twoFactorPerSession: { limit: 5, windowMs: 5 * 60 * 1000 },
+  twoFactorPerAccount: { limit: 10, windowMs: 15 * 60 * 1000 },
+  twoFactorPerIp: { limit: 30, windowMs: 60 * 60 * 1000 },
 } as const;
 
 /**

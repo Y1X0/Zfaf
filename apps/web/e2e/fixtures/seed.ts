@@ -1,6 +1,15 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
-import { flushAnalytics, parseDraftDocument, resolveDocument, snapshotChecksum } from '@zfaf/core';
+import {
+  TOTP_SECRET_BYTES,
+  flushAnalytics,
+  normaliseRecoveryCode,
+  parseDraftDocument,
+  recoveryCodeFromBytes,
+  resolveDocument,
+  snapshotChecksum,
+} from '@zfaf/core';
+import { AesGcmSecretCipher } from '@zfaf/infra/crypto/cipher';
 import { PrismaAnalyticsRepository, getPrismaClient } from '@zfaf/db';
 import { RedisAnalyticsBuffer, getRedis } from '@zfaf/infra/analytics';
 
@@ -434,8 +443,23 @@ export async function seedStaffSession(
      * §10), so a test that checks that rule needs to be able to age one.
      */
     readonly signedInMinutesAgo?: number;
+    /**
+     * The second factor's state for this operator (docs/09 §2.8, M10).
+     *
+     * Defaults to `verified`, because 2FA is mandatory for staff and a session
+     * without it is not a signed-in operator at all — an admin test that
+     * started from an unverified session would be testing the gate, not the
+     * thing it means to test. The other two values exist so the gate itself
+     * can be exercised from the outside.
+     */
+    readonly twoFactor?: 'none' | 'unverified' | 'verified';
   } = {},
-): Promise<{ userId: string; sessionToken: string }> {
+): Promise<{
+  userId: string;
+  sessionToken: string;
+  sessionId: string;
+  totpSecret: Uint8Array | null;
+}> {
   const prisma = prismaClient();
   const userId = randomUUID();
   await prisma.user.create({
@@ -448,20 +472,87 @@ export async function seedStaffSession(
     },
   });
 
+  const twoFactor = options.twoFactor ?? 'verified';
+  let totpSecret: Uint8Array | null = null;
+
+  if (twoFactor !== 'none') {
+    // Sealed with the same key the server holds, so the credential this writes
+    // is one the running application can actually verify against — a fixture
+    // that wrote plaintext would test a path production does not have.
+    totpSecret = new Uint8Array(randomBytes(TOTP_SECRET_BYTES));
+    await prisma.twoFactorCredential.create({
+      data: {
+        id: randomUUID(),
+        userId,
+        secretSealed: Buffer.from(new AesGcmSecretCipher(totpEncryptionKey()).encrypt(totpSecret)),
+        confirmedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+  }
+
   const createdAt = new Date(Date.now() - (options.signedInMinutesAgo ?? 0) * 60 * 1000);
   const sessionToken = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+  const sessionId = randomUUID();
   await prisma.session.create({
     data: {
-      id: randomUUID(),
+      id: sessionId,
       userId,
       tokenHash: createHash('sha256').update(sessionToken).digest(),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       createdAt,
       lastUsedAt: new Date(),
+      twoFactorVerifiedAt: twoFactor === 'verified' ? new Date() : null,
     },
   });
 
-  return { userId, sessionToken };
+  return { userId, sessionToken, sessionId, totpSecret };
+}
+
+/**
+ * A second, unverified session for an operator who already has one.
+ *
+ * Exists for exactly one test: replaying a spent TOTP code from a different
+ * browser on the same account, which is the attack replay protection is for.
+ */
+export async function seedSecondStaffSession(userId: string): Promise<string> {
+  const sessionToken = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+  await prismaClient().session.create({
+    data: {
+      id: randomUUID(),
+      userId,
+      tokenHash: createHash('sha256').update(sessionToken).digest(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      twoFactorVerifiedAt: null,
+    },
+  });
+  return sessionToken;
+}
+
+/**
+ * The key the server encrypts TOTP secrets with.
+ *
+ * Read from the environment with the same fallback `playwright.config.ts`
+ * passes to the server, so the fixture and the application agree without a
+ * second place to keep in sync.
+ */
+export function totpEncryptionKey(): string {
+  return (
+    process.env['TOTP_ENCRYPTION_KEY'] ?? 'e2e-totp-encryption-key-at-least-32-characters-long'
+  );
+}
+
+/** Issues a recovery code for a seeded operator, returning the plaintext once. */
+export async function seedRecoveryCode(userId: string): Promise<string> {
+  const code = recoveryCodeFromBytes(new Uint8Array(randomBytes(16)));
+  await prismaClient().twoFactorRecoveryCode.create({
+    data: {
+      id: randomUUID(),
+      userId,
+      codeHash: createHash('sha256').update(normaliseRecoveryCode(code)).digest(),
+    },
+  });
+  return code;
 }
 
 /** How many analytics rows an invitation has. Direct, so the beacon is measured end to end. */

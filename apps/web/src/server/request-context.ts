@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 
 import { cookies, headers } from 'next/headers';
 
-import { type Actor, SESSION_COOKIE_NAME, isStaff, resolveSession } from '@zfaf/core';
+import {
+  type Actor,
+  SESSION_COOKIE_NAME,
+  type TwoFactorGate,
+  isStaff,
+  resolveSession,
+} from '@zfaf/core';
 
 import { container } from './container.js';
 
@@ -29,6 +35,15 @@ export type RequestActor =
       readonly ipHash: string;
       /** When this session was created. The admin guard is the only reader. */
       readonly sessionStartedAt: Date;
+      /**
+       * Whether this session cleared its second factor (docs/09 §2.8).
+       *
+       * `requireActor` already refuses anything but a satisfied gate, so an
+       * ordinary handler never sees an unsatisfied one. It is carried here for
+       * the four endpoints that exist to satisfy it, which call
+       * `requireActorPendingTwoFactor` instead.
+       */
+      readonly twoFactor: TwoFactorGate;
     }
   | { readonly authenticated: false; readonly reason: string; readonly ipHash: string };
 
@@ -47,7 +62,15 @@ export async function clientIpHash(): Promise<string> {
   return createHash('sha256').update(address).digest('hex').slice(0, 32);
 }
 
-export async function requireActor(): Promise<RequestActor> {
+/**
+ * Resolves the session **without** applying the second-factor gate.
+ *
+ * Exported narrowly and named awkwardly on purpose. Only the endpoints that
+ * exist to *satisfy* the gate may use it — enrollment, confirmation, the
+ * challenge, the status read and signing out — and the awkward name is there so
+ * that a handler reaching for it stands out in review.
+ */
+export async function requireActorPendingTwoFactor(): Promise<RequestActor> {
   const ipHash = await clientIpHash();
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE_NAME)?.value ?? null;
@@ -62,6 +85,7 @@ export async function requireActor(): Promise<RequestActor> {
     sessions: deps.sessions,
     memberships: deps.memberships,
     audit: deps.audit,
+    twoFactor: deps.twoFactor,
     tokens: deps.tokens,
     clock: deps.clock,
   });
@@ -78,7 +102,36 @@ export async function requireActor(): Promise<RequestActor> {
     actor: resolved.actor,
     ipHash,
     sessionStartedAt: resolved.sessionStartedAt,
+    twoFactor: resolved.twoFactor,
   };
+}
+
+/**
+ * The authenticated actor for an ordinary request.
+ *
+ * The second-factor gate is applied **here**, not per route. That placement is
+ * the whole design: a per-route check is a list somebody has to remember to
+ * extend, and the one entry point that gets forgotten is the entirety of the
+ * protection. A session that owes a challenge is simply not authenticated, and
+ * every handler that already handles `authenticated: false` handles this too
+ * without knowing it exists.
+ */
+export async function requireActor(): Promise<RequestActor> {
+  const session = await requireActorPendingTwoFactor();
+  if (!session.authenticated) return session;
+
+  if (session.twoFactor.state === 'ENROLLMENT_REQUIRED') {
+    return {
+      authenticated: false,
+      reason: 'TWO_FACTOR_ENROLLMENT_REQUIRED',
+      ipHash: session.ipHash,
+    };
+  }
+  if (session.twoFactor.state === 'CHALLENGE_REQUIRED') {
+    return { authenticated: false, reason: 'TWO_FACTOR_REQUIRED', ipHash: session.ipHash };
+  }
+
+  return session;
 }
 
 /**
@@ -104,11 +157,12 @@ export type AdminGate =
  * a stranger has no use for. The distinction returned here is for the route to
  * log, not to publish.
  *
- * ⚠️ **What this does not check: two-factor authentication.** docs/09 §2 makes
- * 2FA mandatory for `admin` and `superadmin` with no exception, and it does
- * not exist yet — it was not built in M2 and is not in M8's scope. The gap is
- * recorded as an open gate rather than papered over here: the admin console
- * must not be enabled in production until it is closed.
+ * **Two-factor authentication is enforced** (docs/09 §2.8, M10). Not here,
+ * though — `requireActor` refuses a session that owes a challenge before this
+ * function ever runs, so an unverified staff session reaches this as
+ * `UNAUTHENTICATED`. Putting the check in the shared path rather than in this
+ * one gate is what makes "every admin entry point" true by construction rather
+ * than by an inventory of entry points.
  */
 export async function requireAdmin(): Promise<AdminGate> {
   const session = await requireActor();

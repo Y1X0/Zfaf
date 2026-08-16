@@ -8,6 +8,15 @@
 export interface TokenGenerator {
   /** Cryptographically secure random token, URL-safe. */
   generate(bytes: number): string;
+  /**
+   * Cryptographically secure raw bytes.
+   *
+   * Separate from `generate` because a TOTP secret is *bytes*, not text: the
+   * base32 an authenticator reads is an encoding of the same 20 bytes the HMAC
+   * consumes, and deriving them from a URL-safe string would silently shrink
+   * the entropy to whatever that alphabet carries.
+   */
+  randomBytes(count: number): Uint8Array;
   /** SHA-256 of the token. What actually goes in the database. */
   hash(token: string): Uint8Array;
   /** Constant-time comparison, so verification cannot be timed. */

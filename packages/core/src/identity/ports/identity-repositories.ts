@@ -69,6 +69,14 @@ export interface StoredSession {
   readonly createdAt: Date;
   readonly lastUsedAt: Date;
   readonly userAgent: string | null;
+  /**
+   * When this session cleared its second factor (docs/09 §2.8).
+   *
+   * On the session rather than on the user, because that is the question worth
+   * asking: not "does this person have 2FA?" but "did *this* browser prove it?"
+   * A stolen cookie belongs to a session that never answered the challenge.
+   */
+  readonly twoFactorVerifiedAt: Date | null;
 }
 
 export interface SessionRepository {
@@ -76,6 +84,8 @@ export interface SessionRepository {
   /** Lookup is by hash: the plaintext token never reaches the database. */
   findByTokenHash(tokenHash: Uint8Array): Promise<StoredSession | null>;
   touch(sessionId: string, lastUsedAt: Date, newExpiresAt: Date | null): Promise<void>;
+  /** Records that this session answered its second-factor challenge. */
+  markTwoFactorVerified(sessionId: string, at: Date): Promise<void>;
   revoke(sessionId: string, at: Date): Promise<void>;
   /** Sign out everywhere. Also runs on password change and on suspension. */
   revokeAllForUser(userId: string, at: Date, exceptSessionId?: string): Promise<number>;

@@ -153,6 +153,20 @@ export class PrismaSessionRepository implements SessionRepository {
     });
   }
 
+  /**
+   * Records that this session answered its second-factor challenge.
+   *
+   * `updateMany` with a `revokedAt: null` predicate rather than `update`: a
+   * session revoked between the challenge and this write must not come back
+   * verified.
+   */
+  async markTwoFactorVerified(sessionId: string, at: Date): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: { id: sessionId, revokedAt: null },
+      data: { twoFactorVerifiedAt: at },
+    });
+  }
+
   async revoke(sessionId: string, at: Date): Promise<void> {
     await this.prisma.session.updateMany({
       where: { id: sessionId, revokedAt: null },
@@ -454,5 +468,6 @@ function toStoredSession(row: SessionRow): StoredSession {
     createdAt: row.createdAt,
     lastUsedAt: row.lastUsedAt,
     userAgent: row.userAgent,
+    twoFactorVerifiedAt: row.twoFactorVerifiedAt,
   };
 }

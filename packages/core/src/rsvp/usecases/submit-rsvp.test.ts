@@ -105,6 +105,7 @@ const clock: Clock = { now: () => NOW };
 const ids: IdGenerator = { uuid: () => 'rsvp-generated', token: () => 'token' };
 const tokens: TokenGenerator = {
   generate: () => 'plain-edit-token',
+  randomBytes: (count: number) => new Uint8Array(count),
   hash: (value: string) => new TextEncoder().encode(value),
   verify: () => true,
 };

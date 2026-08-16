@@ -21,7 +21,14 @@ import type {
   VerificationPurpose,
   VerificationTokenRepository,
 } from '../ports/identity-repositories.js';
+import type {
+  NewTwoFactorCredential,
+  SecretCipher,
+  TwoFactorCredentialRecord,
+  TwoFactorRepository,
+} from '../ports/two-factor-repository.js';
 import type { AuthDependencies } from './authenticate.js';
+import type { TwoFactorDependencies } from './two-factor.js';
 
 /**
  * In-memory implementations of every identity port.
@@ -41,13 +48,21 @@ export interface CountingHasher extends PasswordHasher {
   verifyCalls: number;
 }
 
+export interface TestTwoFactorHarness extends TestAuthHarness {
+  readonly twoFactorDeps: TwoFactorDependencies;
+  readonly twoFactorRepo: InMemoryTwoFactorRepository;
+}
+
 export interface TestAuthHarness {
   readonly deps: AuthDependencies;
   readonly clock: Clock & { advance(ms: number): void };
   readonly hasher: CountingHasher;
   readonly mail: CapturingMail;
   readonly users: Map<string, UserRecord>;
-  readonly sessions: Map<string, NewSession>;
+  readonly sessions: Map<
+    string,
+    NewSession & { revokedAt: Date | null; twoFactorVerifiedAt: Date | null }
+  >;
   readonly verificationTokens: Map<string, StoredVerificationToken>;
   readonly auditEntries: AuditEntry[];
   readonly memberships: InMemoryMembershipRepository;
@@ -100,6 +115,13 @@ function makeTokenGenerator(): TokenGenerator {
     generate(bytes: number): string {
       counter += 1;
       return `tok-${counter}-${'x'.repeat(Math.max(0, bytes - 8))}`;
+    },
+    randomBytes(count: number): Uint8Array {
+      // Deterministic, so a test can assert on the derived secret rather than
+      // on "some bytes appeared". Distinct per call, so two enrollments differ.
+      counter += 1;
+      const seed = counter;
+      return Uint8Array.from({ length: count }, (_, index) => (seed * 137 + index * 31) & 0xff);
     },
     hash(token: string): Uint8Array {
       // A stable 32-byte digest, so tests can assert on hash length and on the
@@ -182,10 +204,15 @@ class InMemoryUserRepository implements UserRepository {
 }
 
 class InMemorySessionRepository implements SessionRepository {
-  constructor(private readonly sessions: Map<string, NewSession & { revokedAt: Date | null }>) {}
+  constructor(
+    private readonly sessions: Map<
+      string,
+      NewSession & { revokedAt: Date | null; twoFactorVerifiedAt: Date | null }
+    >,
+  ) {}
 
   async create(session: NewSession): Promise<StoredSession> {
-    this.sessions.set(session.id, { ...session, revokedAt: null });
+    this.sessions.set(session.id, { ...session, revokedAt: null, twoFactorVerifiedAt: null });
     return {
       id: session.id,
       userId: session.userId,
@@ -194,7 +221,13 @@ class InMemorySessionRepository implements SessionRepository {
       createdAt: session.now,
       lastUsedAt: session.now,
       userAgent: session.userAgent,
+      twoFactorVerifiedAt: null,
     };
+  }
+
+  async markTwoFactorVerified(sessionId: string, at: Date): Promise<void> {
+    const existing = this.sessions.get(sessionId);
+    if (existing) this.sessions.set(sessionId, { ...existing, twoFactorVerifiedAt: at });
   }
 
   async findByTokenHash(tokenHash: Uint8Array): Promise<StoredSession | null> {
@@ -212,6 +245,7 @@ class InMemorySessionRepository implements SessionRepository {
           createdAt: match.now,
           lastUsedAt: match.now,
           userAgent: match.userAgent,
+          twoFactorVerifiedAt: match.twoFactorVerifiedAt,
         }
       : null;
   }
@@ -246,6 +280,7 @@ class InMemorySessionRepository implements SessionRepository {
         createdAt: session.now,
         lastUsedAt: session.now,
         userAgent: session.userAgent,
+        twoFactorVerifiedAt: session.twoFactorVerifiedAt,
       }));
   }
 
@@ -388,7 +423,10 @@ class TestRateLimiter implements RateLimiter {
 export function buildTestAuthDependencies(start: Date): TestAuthHarness {
   const clock = fixedClock(start);
   const users = new Map<string, UserRecord>();
-  const sessions = new Map<string, NewSession & { revokedAt: Date | null }>();
+  const sessions = new Map<
+    string,
+    NewSession & { revokedAt: Date | null; twoFactorVerifiedAt: Date | null }
+  >();
   const verificationTokens = new Map<string, StoredVerificationToken & { tokenHash: Uint8Array }>();
   const auditEntries: AuditEntry[] = [];
 
@@ -428,5 +466,119 @@ export function buildTestAuthDependencies(start: Date): TestAuthHarness {
     verificationTokens,
     auditEntries,
     memberships,
+  };
+}
+
+/**
+ * A cipher that seals by prefixing rather than by encrypting.
+ *
+ * The point of a test double here is to keep the use-case tests about *policy*
+ * — replay, throttling, mandatory roles — rather than about AES. The real
+ * `AesGcmSecretCipher` is exercised against its own properties in
+ * `packages/infra`, including the tamper case this double deliberately does
+ * not simulate.
+ */
+export class PassthroughCipher implements SecretCipher {
+  encrypt(plaintext: Uint8Array): Uint8Array {
+    const sealed = new Uint8Array(plaintext.length + 1);
+    sealed[0] = 0x5a;
+    sealed.set(plaintext, 1);
+    return sealed;
+  }
+
+  decrypt(sealed: Uint8Array): Uint8Array | null {
+    if (sealed.length < 1 || sealed[0] !== 0x5a) return null;
+    return sealed.slice(1);
+  }
+}
+
+export class InMemoryTwoFactorRepository implements TwoFactorRepository {
+  private credential: TwoFactorCredentialRecord | null = null;
+  private codes: { userId: string; hash: Uint8Array; usedAt: Date | null }[] = [];
+
+  async findByUserId(userId: string): Promise<TwoFactorCredentialRecord | null> {
+    return this.credential?.userId === userId ? this.credential : null;
+  }
+
+  async upsertUnconfirmed(credential: NewTwoFactorCredential): Promise<TwoFactorCredentialRecord> {
+    this.credential = {
+      id: credential.id,
+      userId: credential.userId,
+      secretSealed: credential.secretSealed,
+      confirmedAt: null,
+      lastUsedStep: null,
+      createdAt: credential.now,
+    };
+    return this.credential;
+  }
+
+  async confirm(credentialId: string, step: bigint, at: Date): Promise<boolean> {
+    if (!this.credential || this.credential.id !== credentialId) return false;
+    if (this.credential.confirmedAt) return false;
+    this.credential = { ...this.credential, confirmedAt: at, lastUsedStep: step };
+    return true;
+  }
+
+  async recordUsedStep(credentialId: string, step: bigint): Promise<boolean> {
+    if (!this.credential || this.credential.id !== credentialId) return false;
+    const previous = this.credential.lastUsedStep;
+    if (previous !== null && step <= previous) return false;
+    this.credential = { ...this.credential, lastUsedStep: step };
+    return true;
+  }
+
+  async deleteForUser(userId: string): Promise<boolean> {
+    const had = this.credential?.userId === userId;
+    if (had) this.credential = null;
+    this.codes = this.codes.filter((code) => code.userId !== userId);
+    return had;
+  }
+
+  async replaceRecoveryCodes(
+    userId: string,
+    codeHashes: readonly Uint8Array[],
+    _at: Date,
+  ): Promise<void> {
+    this.codes = this.codes.filter((code) => code.userId !== userId);
+    for (const hash of codeHashes) this.codes.push({ userId, hash, usedAt: null });
+  }
+
+  async consumeRecoveryCode(userId: string, codeHash: Uint8Array, at: Date): Promise<boolean> {
+    const match = this.codes.find(
+      (code) =>
+        code.userId === userId &&
+        code.usedAt === null &&
+        code.hash.length === codeHash.length &&
+        code.hash.every((byte, index) => byte === codeHash[index]),
+    );
+    if (!match) return false;
+    match.usedAt = at;
+    return true;
+  }
+
+  async countUnusedRecoveryCodes(userId: string): Promise<number> {
+    return this.codes.filter((code) => code.userId === userId && code.usedAt === null).length;
+  }
+}
+
+/** The auth harness plus everything the two-factor use cases need. */
+export function buildTestTwoFactorDependencies(start: Date): TestTwoFactorHarness {
+  const harness = buildTestAuthDependencies(start);
+  const twoFactorRepo = new InMemoryTwoFactorRepository();
+
+  return {
+    ...harness,
+    twoFactorRepo,
+    twoFactorDeps: {
+      users: harness.deps.users,
+      sessions: harness.deps.sessions,
+      twoFactor: twoFactorRepo,
+      audit: harness.deps.audit,
+      cipher: new PassthroughCipher(),
+      tokens: harness.deps.tokens,
+      rateLimiter: harness.deps.rateLimiter,
+      clock: harness.clock,
+      ids: harness.deps.ids,
+    },
   };
 }

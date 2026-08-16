@@ -21,6 +21,21 @@ export const EnvSchema = z.object({
   // 32 bytes is the floor for the session token HMAC/derivation material.
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
 
+  /**
+   * The key that encrypts TOTP secrets at rest (docs/09 §2.8).
+   *
+   * Separate from `SESSION_SECRET` rather than derived from it, and that
+   * separation is operational rather than aesthetic: rotating the session
+   * secret is a routine, low-consequence act, while rotating this one makes
+   * every enrolled authenticator stop working at once. Sharing the two would
+   * mean the routine act silently performs the catastrophic one.
+   *
+   * Required, not optional. A second factor whose key is absent is a second
+   * factor that quietly does not work, and this system refuses to boot on a
+   * partial environment precisely so that cannot happen in production.
+   */
+  TOTP_ENCRYPTION_KEY: z.string().min(32, 'TOTP_ENCRYPTION_KEY must be at least 32 characters'),
+
   STORAGE_DRIVER: z.enum(['minio', 'r2', 's3']).default('minio'),
   STORAGE_ENDPOINT: z.string().url(),
   STORAGE_REGION: NonEmpty.default('auto'),
@@ -100,6 +115,14 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     const productionIssues: string[] = [];
     if (env.SESSION_SECRET.includes('replace-me')) {
       productionIssues.push('SESSION_SECRET still holds the placeholder value');
+    }
+    if (env.TOTP_ENCRYPTION_KEY.includes('replace-me')) {
+      productionIssues.push('TOTP_ENCRYPTION_KEY still holds the placeholder value');
+    }
+    if (env.TOTP_ENCRYPTION_KEY === env.SESSION_SECRET) {
+      // Sharing them makes a session-secret rotation invalidate every enrolled
+      // authenticator — a routine act with a catastrophic side effect.
+      productionIssues.push('TOTP_ENCRYPTION_KEY must not be the same value as SESSION_SECRET');
     }
     if (env.PUBLIC_BASE_URL.startsWith('http://')) {
       productionIssues.push('PUBLIC_BASE_URL must use https in production');
