@@ -41,6 +41,17 @@ export const EnvSchema = z.object({
     .length(2)
     .regex(/^[A-Z]{2}$/, 'DEFAULT_MARKET must be an ISO 3166-1 alpha-2 code'),
 
+  /**
+   * Cloudflare credentials for the kill switch's cache purge (D8.5).
+   *
+   * Optional, and the absence is handled honestly rather than pretended away:
+   * with no zone configured the moderation action still suspends the
+   * invitation and the audit entry records that no purge happened. What it
+   * must never do is report a purge that did not occur.
+   */
+  CDN_ZONE_ID: z.string().optional(),
+  CDN_API_TOKEN: z.string().optional(),
+
   SENTRY_DSN: z.string().url().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),

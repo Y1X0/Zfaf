@@ -44,6 +44,16 @@ export interface InvitationDocumentInput {
   /** Where the RSVP form posts (M7). */
   readonly rsvpAction: string;
   /**
+   * The invitation's public name, for the view beacon (M8).
+   *
+   * The slug and not the invitation id, deliberately. The visitor already has
+   * the slug — it is the address they typed or tapped — so putting it in the
+   * document tells them nothing new, whereas embedding an internal UUID would
+   * hand every reader a durable handle on a database row and hand a scanner an
+   * enumeration surface.
+   */
+  readonly slug: string;
+  /**
    * The outcome of a reply the guest was just redirected back from.
    *
    * Rendered on the server because the public page has no client framework to
@@ -74,8 +84,19 @@ export async function renderInvitationDocument(input: InvitationDocumentInput): 
   );
 
   const dir = snapshot.locale === 'ar' ? 'rtl' : 'ltr';
+  /**
+   * The slug is escaped here rather than trusted.
+   *
+   * It is the one value on this line that is neither a literal nor
+   * machine-generated, and it is written into an attribute by string
+   * concatenation because the `<html>` element is not part of any React tree
+   * (see the note at the top of this file). A slug is validated on the way in
+   * (ADR-0013) and cannot contain a quote today — which is exactly the kind of
+   * fact that changes without anyone remembering this line.
+   */
+  const slugAttribute = input.slug.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
   const html =
-    `<!DOCTYPE html><html lang="${snapshot.locale}" dir="${dir}" data-server-now="${input.serverNow}">` +
+    `<!DOCTYPE html><html lang="${snapshot.locale}" dir="${dir}" data-server-now="${input.serverNow}" data-invitation-slug="${slugAttribute}">` +
     `<head>${documentStyle}${head}</head>` +
     `<body>${body.html}${share}</body></html>`;
 

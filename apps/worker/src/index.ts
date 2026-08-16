@@ -1,8 +1,15 @@
 import type { Worker } from 'bullmq';
 
-import { NO_OP_SCANNER, expireDueInvitations, sweepMedia, systemClock } from '@zfaf/core';
+import {
+  NO_OP_SCANNER,
+  expireDueInvitations,
+  flushAnalytics,
+  sweepMedia,
+  systemClock,
+} from '@zfaf/core';
 import { type Env, getEnv } from '@zfaf/config';
 import {
+  PrismaAnalyticsRepository,
   PrismaAuditLogRepository,
   PrismaInvitationRepository,
   PrismaMediaMaintenanceRepository,
@@ -10,6 +17,7 @@ import {
   getPrismaClient,
 } from '@zfaf/db';
 import { S3StorageProvider } from '@zfaf/infra';
+import { RedisAnalyticsBuffer, closeRedis, getRedis } from '@zfaf/infra/analytics';
 
 import { SharpImageProcessor } from './media/sharp-image-processor.js';
 import { startMediaWorker } from './media/queue.js';
@@ -27,6 +35,16 @@ import { startMediaWorker } from './media/queue.js';
  */
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * How often buffered views are written (D8.3).
+ *
+ * Sixty seconds, as specified. Short enough that a couple refreshing their
+ * dashboard sees a view they just generated; long enough that a WhatsApp group
+ * of two hundred people opening the link at once becomes one insert instead of
+ * two hundred.
+ */
+const ANALYTICS_FLUSH_INTERVAL_MS = 60 * 1000;
 
 function buildStorage(env: Env) {
   return new S3StorageProvider({
@@ -72,9 +90,46 @@ function start(): void {
     void runExpiry(prisma);
   }, SWEEP_INTERVAL_MS);
 
+  const analyticsBuffer = new RedisAnalyticsBuffer(getRedis(env.REDIS_URL));
+  const analytics = new PrismaAnalyticsRepository(prisma);
+  const analyticsFlush = setInterval(() => {
+    void runAnalyticsFlush(analyticsBuffer, analytics);
+  }, ANALYTICS_FLUSH_INTERVAL_MS);
+
   console.warn(`[worker] started; media queue running against ${storage.key}`);
 
-  registerShutdown(worker, sweep, prisma);
+  registerShutdown(worker, [sweep, analyticsFlush], prisma, analyticsBuffer, analytics);
+}
+
+/**
+ * The analytics flush (D8.3). Never throws — a failed run is reported and retried.
+ *
+ * Quiet when there is nothing to do: this fires every minute of every day, and
+ * a log line per tick would bury the ones that matter. It speaks only when it
+ * wrote something or when something went wrong.
+ */
+async function runAnalyticsFlush(
+  buffer: RedisAnalyticsBuffer,
+  repository: PrismaAnalyticsRepository,
+): Promise<void> {
+  try {
+    const report = await flushAnalytics({ buffer, repository });
+
+    for (const failure of report.failures) {
+      console.error(`[worker] analytics flush: ${failure}`);
+    }
+    if (report.remaining > 0) {
+      // The buffer is not keeping up, which is worth saying out loud before it
+      // reaches its cap and starts dropping views silently.
+      console.warn(
+        `[worker] analytics flushed ${report.written} event(s); ${report.remaining} still queued`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[worker] analytics flush aborted: ${error instanceof Error ? error.message : error}`,
+    );
+  }
 }
 
 /** The garbage collection pass (D4.8). Never throws — a failed run is reported. */
@@ -148,8 +203,10 @@ async function runExpiry(prisma: ReturnType<typeof getPrismaClient>): Promise<vo
 
 function registerShutdown(
   worker: Worker,
-  sweep: NodeJS.Timeout,
+  timers: readonly NodeJS.Timeout[],
   prisma: ReturnType<typeof getPrismaClient>,
+  analyticsBuffer: RedisAnalyticsBuffer,
+  analytics: PrismaAnalyticsRepository,
 ): void {
   let shuttingDown = false;
 
@@ -159,11 +216,16 @@ function registerShutdown(
       shuttingDown = true;
       console.warn(`[worker] received ${signal}, finishing in-flight jobs`);
 
-      clearInterval(sweep);
+      for (const timer of timers) clearInterval(timer);
       // `close()` waits for active jobs. Killing the process instead leaves an
       // asset in `processing` until another worker reclaims it as stalled.
       void worker
         .close()
+        // One last flush on the way out. A deploy every few minutes would
+        // otherwise throw away a minute of views each time, which turns a
+        // bounded loss into a systematic one.
+        .then(() => runAnalyticsFlush(analyticsBuffer, analytics))
+        .then(() => closeRedis())
         .then(() => prisma.$disconnect())
         .finally(() => process.exit(0));
     });

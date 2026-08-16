@@ -37,7 +37,20 @@ export interface SessionDependencies {
 export type ResolveSessionFailure = SessionRejection | 'ACCOUNT_NOT_USABLE' | 'MALFORMED_TOKEN';
 
 export type ResolveSessionResult =
-  | { readonly ok: true; readonly actor: Actor; readonly sessionId: string }
+  | {
+      readonly ok: true;
+      readonly actor: Actor;
+      readonly sessionId: string;
+      /**
+       * When the caller signed in.
+       *
+       * Carried up so the admin routes can require a *recent* sign-in
+       * (docs/04 §10): a session extended over three weeks of ordinary use is
+       * a valid session, but it is not proof that the person at the keyboard
+       * is still the person who authenticated. Ordinary routes ignore this.
+       */
+      readonly sessionStartedAt: Date;
+    }
   | { readonly ok: false; readonly reason: ResolveSessionFailure };
 
 /**
@@ -91,7 +104,7 @@ export async function resolveSession(
       .map((membership) => ({ invitationId: membership.invitationId, role: membership.role })),
   };
 
-  return { ok: true, actor, sessionId: stored.id };
+  return { ok: true, actor, sessionId: stored.id, sessionStartedAt: stored.createdAt };
 }
 
 export type LogoutResult = { readonly ok: true; readonly revoked: number };

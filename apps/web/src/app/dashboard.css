@@ -195,6 +195,83 @@
   color: var(--zfd-muted);
 }
 
+/* ── stats and admin (M8) ────────────────────────────────────────────────── */
+
+.zfd-device {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.zfd-device__bar {
+  inline-size: 100%;
+  block-size: 0.6rem;
+}
+
+.zfd-note {
+  margin-block-start: 1.5rem;
+  color: var(--zfd-muted);
+  font-size: 0.9rem;
+}
+
+.zfd-note p {
+  margin-block: 0.5rem;
+}
+
+/* The admin console is a desktop tool, but it is still read on a phone during
+   an incident, so the table scrolls inside its own box rather than pushing the
+   page sideways. */
+.zfd-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--zfd-border);
+  border-radius: var(--zfd-radius);
+  background: var(--zfd-surface);
+}
+
+.zfd-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.zfd-table th,
+.zfd-table td {
+  padding: 0.6rem 0.75rem;
+  text-align: start;
+  border-block-end: 1px solid var(--zfd-border);
+  white-space: nowrap;
+}
+
+.zfd-table th {
+  color: var(--zfd-muted);
+  font-weight: 600;
+}
+
+.zfd-table tr:last-child td {
+  border-block-end: 0;
+}
+
+.zfd-tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--zfd-bg);
+  border: 1px solid var(--zfd-border);
+  font-size: 0.8rem;
+}
+
+.zfd-tag--suspended {
+  border-color: #a3342a;
+  color: #a3342a;
+}
+
+.zfd-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+  flex-wrap: wrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

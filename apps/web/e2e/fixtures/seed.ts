@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { parseDraftDocument, resolveDocument, snapshotChecksum } from '@zfaf/core';
-import { getPrismaClient } from '@zfaf/db';
+import { flushAnalytics, parseDraftDocument, resolveDocument, snapshotChecksum } from '@zfaf/core';
+import { PrismaAnalyticsRepository, getPrismaClient } from '@zfaf/db';
+import { RedisAnalyticsBuffer, getRedis } from '@zfaf/infra/analytics';
 
 /**
  * Seeds a signed-in user with an invitation, for the end-to-end suite.
@@ -406,7 +407,19 @@ export async function readCounters(
  * the guest list, because guest data is not staff-readable however senior the
  * account (docs/09 §3.4).
  */
-export async function seedStaffSession(): Promise<{ userId: string; sessionToken: string }> {
+export async function seedStaffSession(
+  options: {
+    /** `admin` by default; `support` to check the narrower role (M8). */
+    readonly role?: 'support' | 'admin' | 'superadmin';
+    /**
+     * How long ago this operator signed in.
+     *
+     * The admin console requires a session younger than four hours (docs/04
+     * §10), so a test that checks that rule needs to be able to age one.
+     */
+    readonly signedInMinutesAgo?: number;
+  } = {},
+): Promise<{ userId: string; sessionToken: string }> {
   const prisma = prismaClient();
   const userId = randomUUID();
   await prisma.user.create({
@@ -415,10 +428,11 @@ export async function seedStaffSession(): Promise<{ userId: string; sessionToken
       email: `staff-${randomUUID().slice(0, 8)}@${TEST_EMAIL_DOMAIN}`,
       emailVerifiedAt: new Date(),
       marketCode: 'SA',
-      role: 'admin',
+      role: options.role ?? 'admin',
     },
   });
 
+  const createdAt = new Date(Date.now() - (options.signedInMinutesAgo ?? 0) * 60 * 1000);
   const sessionToken = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
   await prisma.session.create({
     data: {
@@ -426,10 +440,36 @@ export async function seedStaffSession(): Promise<{ userId: string; sessionToken
       userId,
       tokenHash: createHash('sha256').update(sessionToken).digest(),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      createdAt: new Date(),
+      createdAt,
       lastUsedAt: new Date(),
     },
   });
 
   return { userId, sessionToken };
+}
+
+/** How many analytics rows an invitation has. Direct, so the beacon is measured end to end. */
+export async function countAnalyticsEvents(invitationId: string): Promise<number> {
+  return await prismaClient().analyticsEvent.count({ where: { invitationId } });
+}
+
+/**
+ * Everything sitting in the analytics buffer, as raw text.
+ *
+ * Read directly from Redis so a test can assert on **what is actually at rest
+ * there**, not on what a repository chose to show it.
+ */
+export async function pendingAnalytics(): Promise<readonly string[]> {
+  const redis = getRedis(process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
+  return await redis.lrange('zfaf:analytics:pending', 0, -1);
+}
+
+/** Drains the buffer into the database, as the worker's timer would. */
+export async function flushAnalyticsNow(): Promise<number> {
+  const redis = getRedis(process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
+  const report = await flushAnalytics({
+    buffer: new RedisAnalyticsBuffer(redis),
+    repository: new PrismaAnalyticsRepository(prismaClient()),
+  });
+  return report.written;
 }

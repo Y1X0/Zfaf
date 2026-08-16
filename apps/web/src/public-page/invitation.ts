@@ -375,6 +375,57 @@ function wireReveal(root: Document): Cleanup {
 
 // ── entry point ─────────────────────────────────────────────────────────────
 
+// ── the view beacon (D8.1, D8.2) ────────────────────────────────────────────
+
+/**
+ * Reports one view, anonymously, and forgets about it.
+ *
+ * Everything about this is deliberately unremarkable, because it is the piece
+ * most likely to be turned into something it should not be:
+ *
+ *   • **It sets no cookie and reads no storage.** Not `document.cookie`, not
+ *     `localStorage`, not `sessionStorage`, no fingerprinting of any kind. The
+ *     public page must show zero cookies in a browser inspection and this is
+ *     the only call that could have broken that (ADR-0009).
+ *   • **It sends the slug and the word `view`.** Nothing else. No screen size,
+ *     no timezone, no referrer, no identifier — the server derives the device
+ *     category from the User-Agent it was going to receive anyway, and derives
+ *     nothing else at all.
+ *   • **It cannot fail visibly.** `sendBeacon` is fire-and-forget by
+ *     definition and the `fetch` fallback ignores its own result. The endpoint
+ *     answers `204` unconditionally, so there is nothing to handle.
+ *
+ * `keepalive` on the fallback matters on a page people close quickly: without
+ * it a guest who reads the date and shuts the tab is never counted.
+ */
+function reportView(root: Document): Cleanup {
+  const slug = root.documentElement.getAttribute('data-invitation-slug');
+  if (!slug) return () => {};
+
+  const body = JSON.stringify({ slug, type: 'view' });
+  const url = '/api/public/analytics/event';
+
+  try {
+    if (navigator.sendBeacon?.(url, new Blob([body], { type: 'text/plain' }))) {
+      return () => {};
+    }
+  } catch {
+    // Some browsers throw rather than return false when the payload type is
+    // refused. Either way the fallback below covers it.
+  }
+
+  void fetch(url, {
+    method: 'POST',
+    body,
+    keepalive: true,
+    // `omit`, explicitly. The endpoint neither needs nor wants a session, and
+    // saying so here means a future default change cannot start attaching one.
+    credentials: 'omit',
+  }).catch(() => {});
+
+  return () => {};
+}
+
 export function enhanceInvitation(root: Document = document): Cleanup {
   const skew = measureSkew(root);
   const cleanups = [
@@ -384,6 +435,7 @@ export function enhanceInvitation(root: Document = document): Cleanup {
     wireShare(root),
     wireRsvp(root),
     wireReveal(root),
+    reportView(root),
   ];
   // Marks the page as enhanced, which is what the end-to-end tests wait on
   // instead of sleeping.

@@ -73,6 +73,19 @@ export interface PublicInvitationView {
   readonly expiresAt: Date | null;
 }
 
+/**
+ * Just enough of an invitation to decide whether a public hit counts (M8).
+ *
+ * Narrower than `PublicInvitationView` on purpose: this is what an unauthenticated
+ * beacon handler gets, and it carries no content at all — not the couple's
+ * names, not the venue, not even the title.
+ */
+export interface PublicSlugIdentity {
+  readonly invitationId: string;
+  readonly status: InvitationStatus;
+  readonly expiresAt: Date | null;
+}
+
 export interface CreateInvitationInput {
   readonly id: string;
   readonly ownerId: string;
@@ -127,6 +140,17 @@ export interface InvitationRepository {
   findPublishedBySlug(slug: string): Promise<PublicInvitationView | null>;
   /** Resolves a renamed slug so links already sent keep working (ADR-0013). */
   findSlugRedirect(oldSlug: string): Promise<string | null>;
+
+  /**
+   * The identity behind a public slug, and nothing else (M8).
+   *
+   * Exists so the analytics beacon does not have to load a whole published
+   * snapshot to count one view. It returns the three fields needed to decide
+   * whether the view is countable — and, importantly, it is the *server* that
+   * turns a slug into an invitation id, so the id never has to appear in a
+   * public page for a client to send back.
+   */
+  resolvePublicSlug(slug: string): Promise<PublicSlugIdentity | null>;
 
   /**
    * Whether a slug could be claimed right now.

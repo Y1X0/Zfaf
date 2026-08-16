@@ -11,6 +11,7 @@ import type {
   InvitationRepository,
   InvitationSummary,
   PublicInvitationView,
+  PublicSlugIdentity,
   PublishInput,
   PublishOutcome,
   RollbackOutcome,
@@ -125,6 +126,15 @@ class FakeInvitationRepository implements InvitationRepository {
 
   async findSlugRedirect(oldSlug: string): Promise<string | null> {
     return this.redirects.get(oldSlug) ?? null;
+  }
+
+  async resolvePublicSlug(slug: string): Promise<PublicSlugIdentity | null> {
+    for (const row of this.rows.values()) {
+      if (row.slug === slug && row.deletedAt === null) {
+        return { invitationId: row.id, status: row.status, expiresAt: row.expiresAt };
+      }
+    }
+    return null;
   }
 
   async isSlugAvailable(slug: string): Promise<boolean> {

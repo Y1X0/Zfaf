@@ -117,6 +117,7 @@ export async function GET(
     description: copy.description,
     rsvpAction: `${baseUrl(request)}/api/public/invitations/${encodeURIComponent(slug)}/rsvp`,
     rsvpStatus,
+    slug,
   });
 
   // A section that throws is dropped and the rest of the invitation still

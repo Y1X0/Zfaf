@@ -11,3 +11,5 @@ export * from './repositories/invitation.repository.js';
 export * from './repositories/identity.repository.js';
 export * from './repositories/media.repository.js';
 export * from './repositories/rsvp.repository.js';
+export * from './repositories/analytics.repository.js';
+export * from './repositories/admin.repository.js';

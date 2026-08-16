@@ -11,7 +11,9 @@
     "./crypto/password": "./src/crypto/argon2-password-hasher.ts",
     "./rate-limit": "./src/rate-limit/index.ts",
     "./mail": "./src/mail/index.ts",
-    "./qr": "./src/qr/index.ts"
+    "./qr": "./src/qr/index.ts",
+    "./analytics": "./src/analytics/index.ts",
+    "./cdn": "./src/cdn/index.ts"
   },
   "scripts": {
     "lint": "eslint .",
@@ -23,6 +25,7 @@
     "@node-rs/argon2": "^2.0.0",
     "@zfaf/core": "workspace:*",
     "@zfaf/shared": "workspace:*",
+    "ioredis": "^5.11.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

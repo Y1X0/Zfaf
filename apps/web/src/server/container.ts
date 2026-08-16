@@ -1,5 +1,7 @@
 import { getEnv } from '@zfaf/config';
 import {
+  PrismaAdminRepository,
+  PrismaAnalyticsRepository,
   PrismaAuditLogRepository,
   PrismaInvitationRepository,
   PrismaMediaRepository,
@@ -16,7 +18,17 @@ import { S3StorageProvider } from '@zfaf/infra/storage';
 import { NodeIdGenerator, NodeTokenGenerator } from '@zfaf/infra/crypto/tokens';
 import { NoopMailService } from '@zfaf/infra/mail';
 import { SlidingWindowRateLimiter } from '@zfaf/infra/rate-limit';
-import { type MailService, type RsvpNotification, systemClock } from '@zfaf/core';
+import { RedisAnalyticsBuffer, RedisDailySalt, getRedis } from '@zfaf/infra/analytics';
+import { CloudflareCdnPurger } from '@zfaf/infra/cdn';
+import {
+  type AnalyticsBuffer,
+  type CdnPurger,
+  type DailySaltStore,
+  type MailService,
+  NO_CDN_PURGER,
+  type RsvpNotification,
+  systemClock,
+} from '@zfaf/core';
 
 import { TurnstileHumanCheck } from './turnstile.js';
 
@@ -43,7 +55,13 @@ export interface Container {
   readonly audit: PrismaAuditLogRepository;
   readonly invitations: PrismaInvitationRepository;
   readonly rsvps: PrismaRsvpRepository;
+  readonly analytics: PrismaAnalyticsRepository;
+  readonly admin: PrismaAdminRepository;
   readonly media: PrismaMediaRepository;
+  /** The rotating salt (D8.1). Redis-only, never written anywhere durable. */
+  readonly salt: DailySaltStore;
+  readonly analyticsBuffer: AnalyticsBuffer;
+  readonly cdn: CdnPurger;
   readonly storage: S3StorageProvider;
   readonly tokens: NodeTokenGenerator;
   readonly ids: NodeIdGenerator;
@@ -60,6 +78,7 @@ export function container(): Container {
 
   const env = getEnv();
   const prisma = getPrismaClient();
+  const redis = getRedis(env.REDIS_URL);
 
   cached = {
     prisma,
@@ -69,7 +88,12 @@ export function container(): Container {
     audit: new PrismaAuditLogRepository(prisma),
     invitations: new PrismaInvitationRepository(prisma),
     rsvps: new PrismaRsvpRepository(prisma),
+    analytics: new PrismaAnalyticsRepository(prisma),
+    admin: new PrismaAdminRepository(prisma),
     media: new PrismaMediaRepository(prisma),
+    salt: new RedisDailySalt(redis),
+    analyticsBuffer: new RedisAnalyticsBuffer(redis),
+    cdn: buildCdnPurger(env.CDN_ZONE_ID, env.CDN_API_TOKEN),
     storage: new S3StorageProvider({
       driver: env.STORAGE_DRIVER,
       endpoint: env.STORAGE_ENDPOINT,
@@ -93,6 +117,19 @@ export function container(): Container {
   };
 
   return cached;
+}
+
+/**
+ * The purger, or an honest admission that there is none (D8.5).
+ *
+ * When the zone is unconfigured this returns `NO_CDN_PURGER`, which reports
+ * `purged: false`. That distinction reaches the audit log, so a later incident
+ * review can tell "we purged the edge" from "there was no edge to purge" —
+ * which a stub that always claimed success would have erased.
+ */
+function buildCdnPurger(zoneId: string | undefined, apiToken: string | undefined): CdnPurger {
+  if (!zoneId || !apiToken) return NO_CDN_PURGER;
+  return new CloudflareCdnPurger({ zoneId, apiToken });
 }
 
 /**

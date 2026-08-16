@@ -6,6 +6,7 @@ import {
   type InvitationStatus,
   type InvitationSummary,
   type PublicInvitationView,
+  type PublicSlugIdentity,
   type PublishInput,
   type PublishOutcome,
   type TenantScope,
@@ -146,6 +147,28 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
     if (!row?.invitation || row.invitation.deletedAt !== null) return null;
     return row.invitation.slug;
+  }
+
+  /**
+   * The identity behind a public slug, and nothing else (M8).
+   *
+   * Three columns, no join, no snapshot. It exists so the analytics beacon can
+   * decide whether a view counts without loading the whole published document
+   * — and so that turning a slug into an invitation id stays a server-side
+   * operation. The public page never carries the id, so nothing a visitor
+   * holds can be replayed against another endpoint.
+   */
+  async resolvePublicSlug(slug: string): Promise<PublicSlugIdentity | null> {
+    const row = await this.prisma.invitation.findFirst({
+      where: { slug, deletedAt: null },
+      select: { id: true, status: true, expiresAt: true },
+    });
+    if (!row) return null;
+    return {
+      invitationId: row.id,
+      status: row.status as InvitationStatus,
+      expiresAt: row.expiresAt,
+    };
   }
 
   /**
