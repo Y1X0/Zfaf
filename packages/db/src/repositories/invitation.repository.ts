@@ -9,8 +9,10 @@ import {
   type PublishInput,
   type PublishOutcome,
   type TenantScope,
+  type RollbackOutcome,
   type UpdateDraftOutcome,
   readSnapshot,
+  snapshotChecksum,
 } from '@zfaf/core';
 
 /**
@@ -47,6 +49,11 @@ export class PrismaInvitationRepository implements InvitationRepository {
   async findByIdInScope(id: string, scope: TenantScope): Promise<InvitationRecord | null> {
     const row = await this.prisma.invitation.findFirst({
       where: { AND: [{ id }, { deletedAt: null }, this.scopeWhere(scope)] },
+      // The pinned template travels with the record. It used to be filled with
+      // empty placeholders, which meant any caller trusting `templateKey` was
+      // silently reading `''` — a field that lies is worse than one that is
+      // absent, because nothing fails until something depends on it.
+      include: TEMPLATE_PIN,
     });
     return row ? toRecord(row) : null;
   }
@@ -141,6 +148,21 @@ export class PrismaInvitationRepository implements InvitationRepository {
     return row.invitation.slug;
   }
 
+  /**
+   * Advisory availability check for the publish dialog.
+   *
+   * A retired slug counts as taken. Handing it to someone else would silently
+   * repoint a link that is still in other people's messages at a stranger's
+   * wedding — which is worse than the original owner losing the name.
+   */
+  async isSlugAvailable(slug: string): Promise<boolean> {
+    const [live, retired] = await Promise.all([
+      this.prisma.invitation.count({ where: { slug, deletedAt: null } }),
+      this.prisma.slugHistory.count({ where: { oldSlug: slug } }),
+    ]);
+    return live === 0 && retired === 0;
+  }
+
   async create(input: CreateInvitationInput): Promise<InvitationRecord> {
     const templateVersion = await this.prisma.templateVersion.findUniqueOrThrow({
       where: { id: input.templateVersionId },
@@ -164,6 +186,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
         createdAt: input.now,
         updatedAt: input.now,
       },
+      include: TEMPLATE_PIN,
     });
 
     // The owner is also a member, so authorization has one shape to reason
@@ -246,7 +269,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
             invitationId: input.invitationId,
             versionNumber,
             publishedDocument: input.snapshot as unknown as Prisma.InputJsonValue,
-            documentChecksum: checksum(input.snapshot),
+            documentChecksum: snapshotChecksum(input.snapshot),
             templateVersionId: invitation.templateVersionId,
             publishedById: input.publishedBy,
             publishedAt: input.now,
@@ -299,6 +322,92 @@ export class PrismaInvitationRepository implements InvitationRepository {
     return result.count > 0;
   }
 
+  /**
+   * Moves the published pointer to an earlier version (D6.3).
+   *
+   * Only the pointer moves. The version being left is not deleted and the one
+   * being returned to is not rewritten — the append-only trigger would refuse
+   * either — so a rollback is itself reversible.
+   */
+  async rollbackToVersion(
+    id: string,
+    scope: TenantScope,
+    versionNumber: number,
+    now: Date,
+  ): Promise<RollbackOutcome> {
+    const invitation = await this.findByIdInScope(id, scope);
+    if (!invitation) return { ok: false, error: 'NOT_FOUND' };
+    if (invitation.publishedVersionId === null) return { ok: false, error: 'NOT_PUBLISHED' };
+
+    const target = await this.prisma.invitationVersion.findFirst({
+      where: { invitationId: id, versionNumber },
+      select: { id: true, versionNumber: true },
+    });
+    if (!target) return { ok: false, error: 'NO_SUCH_VERSION' };
+
+    await this.prisma.invitation.update({
+      where: { id },
+      // `publishedAt` is left alone: it records when this invitation first went
+      // live, and rolling back does not change that it did.
+      data: { publishedVersionId: target.id, updatedAt: now },
+    });
+
+    return { ok: true, versionId: target.id, versionNumber: target.versionNumber };
+  }
+
+  /**
+   * The scheduled expiry sweep.
+   *
+   * Unscoped, and narrow enough that the missing scope leaks nothing: the
+   * predicate names the two conditions in full, so the statement can only
+   * touch invitations that are published and whose own expiry has passed.
+   */
+  async expireDueInvitations(now: Date, limit: number): Promise<readonly string[]> {
+    const due = await this.prisma.invitation.findMany({
+      where: { status: 'PUBLISHED', deletedAt: null, expiresAt: { not: null, lte: now } },
+      select: { id: true },
+      orderBy: { expiresAt: 'asc' },
+      take: limit,
+    });
+    if (due.length === 0) return [];
+
+    const ids = due.map((row) => row.id);
+    // Re-stating the predicate rather than trusting the ids alone: an
+    // invitation republished between the read and the write must not be
+    // expired out from under its owner.
+    const updated = await this.prisma.invitation.updateMany({
+      where: { id: { in: ids }, status: 'PUBLISHED', expiresAt: { not: null, lte: now } },
+      data: { status: 'EXPIRED', updatedAt: now },
+    });
+
+    return updated.count === ids.length ? ids : await this.confirmExpired(ids);
+  }
+
+  /** Which of the candidates actually ended up expired, when some raced. */
+  private async confirmExpired(ids: readonly string[]): Promise<readonly string[]> {
+    const rows = await this.prisma.invitation.findMany({
+      where: { id: { in: [...ids] }, status: 'EXPIRED' },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  async setVisibility(
+    id: string,
+    scope: TenantScope,
+    visibility: 'UNLISTED' | 'INDEXED',
+    now: Date,
+  ): Promise<boolean> {
+    // `PROTECTED` is not reachable from here: it needs a credential the MVP
+    // does not collect, and offering the state without the mechanism would be
+    // the security theatre ADR-0017 exists to prevent.
+    const result = await this.prisma.invitation.updateMany({
+      where: { AND: [{ id }, { deletedAt: null }, this.scopeWhere(scope)] },
+      data: { visibility, updatedAt: now },
+    });
+    return result.count > 0;
+  }
+
   async softDelete(id: string, scope: TenantScope, now: Date): Promise<boolean> {
     const result = await this.prisma.invitation.updateMany({
       where: { AND: [{ id }, { deletedAt: null }, this.scopeWhere(scope)] },
@@ -346,7 +455,20 @@ export class PrismaInvitationRepository implements InvitationRepository {
 
 // ── mapping ─────────────────────────────────────────────────────────────────
 
-type InvitationRow = Awaited<ReturnType<PrismaClient['invitation']['findFirstOrThrow']>>;
+/**
+ * The template an invitation is pinned to.
+ *
+ * Selected on every read that produces a record, because the snapshot written
+ * at publish time freezes this pair and a caller must be able to see it
+ * (ADR-0005).
+ */
+const TEMPLATE_PIN = {
+  template: { select: { key: true } },
+} as const;
+
+type InvitationRow = Awaited<ReturnType<PrismaClient['invitation']['findFirstOrThrow']>> & {
+  template?: { key: string };
+};
 
 /**
  * Maps a row to a domain record.
@@ -362,8 +484,7 @@ function toRecord(row: InvitationRow): InvitationRecord {
     slug: row.slug,
     title: row.title,
     status: row.status as InvitationStatus,
-    templateKey: '',
-    templateVersion: 0,
+    templateKey: row.template?.key ?? '',
     templateVersionId: row.templateVersionId,
     locale: row.locale as 'ar' | 'en',
     marketCode: row.marketCode,
@@ -384,16 +505,6 @@ function toRecord(row: InvitationRow): InvitationRecord {
 
 function toDateString(value: Date): string {
   return value.toISOString().slice(0, 10);
-}
-
-function checksum(snapshot: unknown): string {
-  // Stable ordering, so the same snapshot always hashes the same way.
-  const canonical = JSON.stringify(snapshot, Object.keys(snapshot as object).sort());
-  let hash = 0;
-  for (let index = 0; index < canonical.length; index += 1) {
-    hash = (hash * 31 + canonical.charCodeAt(index)) | 0;
-  }
-  return `v1-${(hash >>> 0).toString(16)}`;
 }
 
 function isUniqueViolation(error: unknown): boolean {

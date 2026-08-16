@@ -113,7 +113,11 @@ module.exports = {
     // which silently removed them from the graph and made every rule about
     // them pass vacuously. The guardrail script is what surfaced this.
     exclude: {
-      path: '(\\.(test|spec)\\.[cm]?[jt]sx?$|^(packages|apps)/[^/]+/(tests?|dist)/|/\\.next/)',
+      // The last alternative is `apps/web/public/`, which holds one *emitted*
+      // bundle. Its TypeScript source in `src/public-page/` is in the graph;
+      // the build output is not, and leaving it in only produced an orphan
+      // warning about a file nobody imports by design.
+      path: '(\\.(test|spec)\\.[cm]?[jt]sx?$|^(packages|apps)/[^/]+/(tests?|dist)/|/\\.next/|^apps/[^/]+/public/)',
     },
     tsConfig: { fileName: 'tsconfig.base.json' },
     tsPreCompilationDeps: true,

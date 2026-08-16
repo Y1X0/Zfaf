@@ -202,3 +202,42 @@ export function countdownParts(target: Date, now: Date): CountdownParts {
     totalMilliseconds,
   };
 }
+
+// ── server clock correction (D6.9) ──────────────────────────────────────────
+
+/**
+ * Below this, a difference is not worth correcting.
+ *
+ * Some of the gap between the two clocks is simply the time the response spent
+ * in flight, and chasing that produces a countdown that twitches by a second
+ * for no reason a guest could perceive.
+ */
+const SKEW_TOLERANCE_MS = 2_000;
+
+/**
+ * How far a visitor's device clock is from ours.
+ *
+ * Phone clocks are wrong far more often than anyone expects — manually set,
+ * stuck after a flat battery, or in the wrong time zone with the date dragged
+ * along. A countdown driven by an uncorrected device clock is the most visible
+ * possible bug: an invitation that says the wedding was yesterday.
+ *
+ * Positive means the device is behind us.
+ */
+export function clockSkew(serverNow: Date, clientNow: Date): number {
+  const difference = serverNow.getTime() - clientNow.getTime();
+  return Math.abs(difference) < SKEW_TOLERANCE_MS ? 0 : difference;
+}
+
+/**
+ * The device clock, corrected.
+ *
+ * The skew is measured once when the page loads and then *added* to each
+ * subsequent device reading, rather than the server time being extrapolated on
+ * its own. The device's monotonic-ish ticking is the reliable part; only its
+ * absolute offset is suspect, so correcting the offset and trusting the ticks
+ * is what keeps the countdown both right and smooth.
+ */
+export function correctedNow(clientNow: Date, skewMilliseconds: number): Date {
+  return new Date(clientNow.getTime() + skewMilliseconds);
+}

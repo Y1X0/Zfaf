@@ -19,6 +19,9 @@ export default tseslint.config(
       '**/.turbo/**',
       '**/coverage/**',
       '**/*.d.ts',
+      // Build output: `apps/web/public/invitation.js` is emitted by esbuild
+      // from the TypeScript in `src/public-page/`, which *is* linted.
+      'apps/web/public/**',
     ],
   },
 

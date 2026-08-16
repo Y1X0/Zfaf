@@ -95,12 +95,38 @@ describe('the render path reaches nothing outside itself', () => {
   });
 
   it('contains no dynamic evaluation', () => {
-    // `eval`, `new Function` and a dynamic `import()` are the three ways data
-    // becomes code. A manifest is data; it must stay that way (ADR-0004).
-    const offenders = SOURCES.filter((file) =>
-      /\beval\s*\(|new\s+Function\s*\(|\bimport\s*\(/.test(file.source),
-    ).map((file) => file.path);
+    /**
+     * `eval`, `new Function` and `import(expression)` are the three ways data
+     * becomes code. A manifest is data; it must stay that way (ADR-0004).
+     *
+     * `import('a-literal')` is deliberately *not* among them, and the
+     * distinction is the whole point rather than a loophole: a literal
+     * specifier is resolved by the bundler at build time and can no more be
+     * influenced by a manifest than a top-level `import` can. What must never
+     * appear is a specifier assembled at runtime — `import(variable)`,
+     * `import(\`…${x}\`)` — because that is the form a template could reach.
+     *
+     * The published render path needs one such literal import
+     * (`react-dom/server`), because the framework refuses a static import of
+     * it from application code (ADR-0020).
+     */
+    const dangerous = /\beval\s*\(|new\s+Function\s*\(|\bimport\s*\(\s*(?!['"][^'"]*['"]\s*\))/;
+    const offenders = SOURCES.filter((file) => dangerous.test(file.source)).map(
+      (file) => file.path,
+    );
     expect(offenders).toEqual([]);
+  });
+
+  it('still rejects an import whose specifier is built at runtime', () => {
+    // Guards the guard: the exception above is narrow, and a regex is exactly
+    // the kind of thing that quietly stops matching.
+    const dangerous = /\beval\s*\(|new\s+Function\s*\(|\bimport\s*\(\s*(?!['"][^'"]*['"]\s*\))/;
+
+    expect(dangerous.test("await import('react-dom/server')")).toBe(false);
+    expect(dangerous.test('await import(specifier)')).toBe(true);
+    expect(dangerous.test('await import(`${base}/mod.js`)')).toBe(true);
+    expect(dangerous.test('eval(source)')).toBe(true);
+    expect(dangerous.test('new Function(body)')).toBe(true);
   });
 
   it('issues no network call', () => {

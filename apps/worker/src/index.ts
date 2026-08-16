@@ -1,8 +1,10 @@
 import type { Worker } from 'bullmq';
 
-import { NO_OP_SCANNER, sweepMedia, systemClock } from '@zfaf/core';
+import { NO_OP_SCANNER, expireDueInvitations, sweepMedia, systemClock } from '@zfaf/core';
 import { type Env, getEnv } from '@zfaf/config';
 import {
+  PrismaAuditLogRepository,
+  PrismaInvitationRepository,
   PrismaMediaMaintenanceRepository,
   PrismaMediaProcessingRepository,
   getPrismaClient,
@@ -67,6 +69,7 @@ function start(): void {
 
   const sweep = setInterval(() => {
     void runSweep(storage, prisma);
+    void runExpiry(prisma);
   }, SWEEP_INTERVAL_MS);
 
   console.warn(`[worker] started; media queue running against ${storage.key}`);
@@ -98,6 +101,48 @@ async function runSweep(
     }
   } catch (error) {
     console.error(`[worker] sweep aborted: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+/**
+ * The expiry sweep (D6.3).
+ *
+ * Not what makes expiry correct — the public route already refuses an
+ * invitation past its date, so a guest never sees one late. This is what makes
+ * the stored *state* honest, so a dashboard, a list and an export all agree
+ * with what the public page has been saying since midnight.
+ *
+ * Runs alongside the media sweep rather than on its own schedule: it is a
+ * bounded, idempotent statement, and a second timer would be a second thing to
+ * misconfigure.
+ */
+async function runExpiry(prisma: ReturnType<typeof getPrismaClient>): Promise<void> {
+  try {
+    const audit = new PrismaAuditLogRepository(prisma);
+    const report = await expireDueInvitations({
+      repository: new PrismaInvitationRepository(prisma),
+      clock: systemClock,
+      recordPublication: async (entry) => {
+        await audit.record(
+          {
+            actorId: null,
+            actorType: 'system',
+            action: 'invitation.expired',
+            resourceType: 'invitation',
+            resourceId: entry.invitationId,
+            metadata: { job: 'expiry-sweep' },
+            ipHash: null,
+          },
+          entry.at,
+        );
+      },
+    });
+
+    if (report.expired > 0) {
+      console.warn(`[worker] expired ${report.expired} invitation(s)`);
+    }
+  } catch (error) {
+    console.error(`[worker] expiry aborted: ${error instanceof Error ? error.message : error}`);
   }
 }
 

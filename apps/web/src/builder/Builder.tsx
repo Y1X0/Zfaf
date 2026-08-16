@@ -10,6 +10,7 @@ import {
 } from '@zfaf/core';
 
 import { DesignPanel, SectionsPanel } from './Panels.js';
+import { PublishPanel } from './PublishPanel.js';
 import { CoupleStep, DateStep, EventsStep, LocationStep, MusicStep, PhotosStep } from './Steps.js';
 import {
   DEFAULT_PREVIEW_DEVICE,
@@ -40,6 +41,16 @@ export interface BuilderProps {
   readonly title: string;
   readonly initialDocument: unknown;
   readonly initialVersion: number;
+  /** Null until the invitation has been published at least once. */
+  readonly initialSlug: string | null;
+  /**
+   * The public origin, resolved on the server.
+   *
+   * Passed down rather than read from `window.location`, because the address
+   * shown in the publish dialog is the one that will be printed on QR codes —
+   * and behind a proxy the browser's origin is not necessarily ours.
+   */
+  readonly publishedBaseUrl: string;
 }
 
 const STEP_LABELS: Readonly<Record<BuilderStepId, string>> = {
@@ -82,6 +93,8 @@ export function Builder({
   title,
   initialDocument,
   initialVersion,
+  initialSlug,
+  publishedBaseUrl,
 }: BuilderProps): ReactElement {
   const builder = useBuilder({ invitationId, initialDocument, initialVersion });
   const [step, setStep] = useState<BuilderStepId>('couple');
@@ -355,6 +368,13 @@ export function Builder({
 
           <DesignPanel document={document} builder={builder} />
           <SectionsPanel document={document} builder={builder} />
+          <PublishPanel
+            invitationId={invitationId}
+            document={document}
+            initialSlug={initialSlug}
+            publishedBaseUrl={publishedBaseUrl}
+            flush={builder.flush}
+          />
         </section>
 
         <section

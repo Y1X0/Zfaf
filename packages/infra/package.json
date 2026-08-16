@@ -10,7 +10,8 @@
     "./crypto/tokens": "./src/crypto/node-token-generator.ts",
     "./crypto/password": "./src/crypto/argon2-password-hasher.ts",
     "./rate-limit": "./src/rate-limit/index.ts",
-    "./mail": "./src/mail/index.ts"
+    "./mail": "./src/mail/index.ts",
+    "./qr": "./src/qr/index.ts"
   },
   "scripts": {
     "lint": "eslint .",
@@ -21,10 +22,15 @@
     "@aws-sdk/s3-request-presigner": "^3.1111.0",
     "@node-rs/argon2": "^2.0.0",
     "@zfaf/core": "workspace:*",
-    "@zfaf/shared": "workspace:*"
+    "@zfaf/shared": "workspace:*",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.6",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
     "typescript": "^5.7.0"
   }
 }

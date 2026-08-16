@@ -9,6 +9,16 @@
  * Every inline-axis rule uses logical properties, so RTL is correct by
  * construction rather than by a mirrored override sheet (ADR-0011). The
  * `zfaf/no-physical-css-properties` rule rejects the physical forms here.
+ *
+ * That rule has one blind spot, and `.zf-hero__arch` fell into it: a transform
+ * is a *function*, not a property, so `inset-inline-start:50%` paired with
+ * `transform:translateX(-50%)` passes the lint and still breaks. It looks like
+ * centring, and is, in LTR — but in RTL the inset is measured from the right
+ * while the translate still moves left, so the arch hung 276px off the page
+ * and every Arabic invitation scrolled sideways on a phone. It is centred with
+ * `inset-inline:0` and `margin-inline:auto` instead, which has no physical
+ * axis to disagree with. Caught by the 390px end-to-end overflow check, which
+ * is now the guard for this class of defect.
  */
 export const BASE_STYLESHEET = `
 .zf-invitation{background:var(--zf-color-bg);color:var(--zf-color-text);font-family:var(--zf-font-body);font-size:var(--zf-font-size-body);line-height:var(--zf-line-height);margin:0}
@@ -26,7 +36,7 @@ export const BASE_STYLESHEET = `
 .zf-hero__bleed{position:absolute;inset:0;inline-size:100%;block-size:100%;object-fit:cover}
 .zf-hero__scrim{position:absolute;inset:0;background:var(--zf-color-overlay)}
 .zf-hero__body--over{position:relative;color:var(--zf-color-bg)}
-.zf-hero__arch{position:absolute;inset-block-start:0;inset-inline-start:50%;transform:translateX(-50%);inline-size:min(22rem,80%);block-size:100%;border-start-start-radius:999px;border-start-end-radius:999px;border:1px solid var(--zf-color-accent);opacity:.35;pointer-events:none}
+.zf-hero__arch{position:absolute;inset-block-start:0;inset-inline:0;margin-inline:auto;inline-size:min(22rem,80%);block-size:100%;border-start-start-radius:999px;border-start-end-radius:999px;border:1px solid var(--zf-color-accent);opacity:.35;pointer-events:none}
 .zf-hero__seal{inline-size:5.5rem;block-size:5.5rem;margin-inline:auto;margin-block-end:1.5rem;border-radius:999px;background:var(--zf-color-primary);color:var(--zf-color-bg);display:grid;place-items:center;font-family:var(--zf-font-display)}
 .zf-hero--typographic .zf-hero__names{font-size:clamp(2rem,9vw,4rem)}
 

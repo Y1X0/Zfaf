@@ -30,3 +30,7 @@ blob-report/
 # Fetched on demand by `pnpm --filter @zfaf/worker fixtures:heic`; not vendored
 # because we will not commit a third-party photograph of unclear licence.
 apps/worker/src/media/__fixtures__/
+
+# Emitted by `apps/web/scripts/build-public-script.mjs` from the TypeScript in
+# `apps/web/src/public-page/`, which is the source of record.
+apps/web/public/invitation.js

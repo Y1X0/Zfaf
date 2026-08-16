@@ -1,13 +1,12 @@
 import { Suspense, type ReactElement } from 'react';
 
-import { type PublishedSnapshot, type SectionInstance, enabledSections } from '@zfaf/core';
+import type { PublishedSnapshot } from '@zfaf/core';
 
-import { defaultRegistry } from '../registry/default-registry.js';
 import type { SectionRegistry } from '../registry/registry.js';
-import type { RenderContent, SectionRenderProps } from '../registry/types.js';
 import { themeToStyleSheet } from '../theme/to-css-variables.js';
 import { BASE_STYLESHEET } from '../theme/base-stylesheet.js';
 import { SectionBoundary } from './SectionBoundary.js';
+import { resolveSections } from './resolve-sections.js';
 
 /**
  * The invitation renderer (ADR-0004).
@@ -58,73 +57,22 @@ export function renderSections(
   snapshot: PublishedSnapshot,
   options: RenderOptions = {},
 ): { elements: ReactElement[]; diagnostics: RenderDiagnostic[] } {
-  const registry = options.registry ?? defaultRegistry;
-  const mode = options.mode ?? 'published';
-  const diagnostics: RenderDiagnostic[] = [];
+  // What to draw is decided in one place, shared with the published path, so
+  // the two cannot disagree about ordering, variants or props (ADR-0004).
+  const { sections, diagnostics } = resolveSections(snapshot, options);
 
-  const content = snapshot.content as unknown as RenderContent;
-  const dir = snapshot.locale === 'ar' ? 'rtl' : 'ltr';
-
-  // Ordering is resolved by the domain, so preview and published agree and ties
-  // break deterministically.
-  const ordered = enabledSections(snapshot.sections as unknown as SectionInstance[]);
-
-  const elements = ordered.flatMap((section, index) => {
-    let definition = registry.get(section.variant);
-
-    if (!definition) {
-      // A manifest naming an unknown variant is data we do not understand — it
-      // is never executed. Fall back to another variant of the same type so the
-      // invitation keeps its structure.
-      const fallback = registry.fallbackForType(section.type);
-      diagnostics.push({
-        sectionId: section.id,
-        variant: section.variant,
-        reason: 'UNKNOWN_VARIANT',
-        detail: fallback ? `fell back to ${fallback.id}` : 'no fallback available',
-      });
-      if (!fallback) return [];
-      definition = fallback;
-    }
-
-    const parsed = definition.propsSchema.parse(section.props);
-    const props = parsed.ok ? parsed.value : definition.propsSchema.defaults;
-
-    if (!parsed.ok) {
-      // Malformed props degrade to the defaults rather than failing the render.
-      diagnostics.push({
-        sectionId: section.id,
-        variant: definition.id,
-        reason: 'INVALID_PROPS',
-        detail: parsed.issues.join('; '),
-      });
-    }
-
-    const Component = definition.Component;
-    const renderProps: SectionRenderProps<Record<string, unknown>> = {
-      props,
-      content,
-      theme: snapshot.theme,
-      locale: snapshot.locale,
-      dir,
-      mode,
-      index,
-      sectionId: section.id,
-    };
-
-    return [
-      // The Suspense boundary is load-bearing, not decorative. During server
-      // rendering React only lets an error boundary contain a throw when the
-      // failing subtree sits inside a Suspense boundary; without it the whole
-      // document render rejects and a guest gets nothing. Verified by
-      // "a section whose component throws does not take the page down".
-      <Suspense key={section.id} fallback={null}>
-        <SectionBoundary sectionId={section.id} variant={definition.id}>
-          <Component {...renderProps} />
-        </SectionBoundary>
-      </Suspense>,
-    ];
-  });
+  const elements = sections.map(({ section, variantId, Component, renderProps }) => (
+    // The Suspense boundary is load-bearing, not decorative. During server
+    // rendering React only lets an error boundary contain a throw when the
+    // failing subtree sits inside a Suspense boundary; without it the whole
+    // document render rejects and a guest gets nothing. Verified by
+    // "a section whose component throws does not take the page down".
+    <Suspense key={section.id} fallback={null}>
+      <SectionBoundary sectionId={section.id} variant={variantId}>
+        <Component {...renderProps} />
+      </SectionBoundary>
+    </Suspense>
+  ));
 
   return { elements, diagnostics };
 }

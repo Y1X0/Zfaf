@@ -169,6 +169,95 @@ jobs:
       - name: Storage contract tests against a live S3 API
         run: pnpm exec vitest run packages/infra/src/storage
 
+  # Stage 3 — the browser. Everything below needs a real Chromium, a real
+  # database and the standalone production build, which is why it is one job
+  # rather than three: the cost is in standing the environment up, not in the
+  # checks themselves.
+  e2e:
+    name: End-to-end, budgets and Lighthouse
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zfaf
+          POSTGRES_PASSWORD: zfaf_ci
+          POSTGRES_DB: zfaf
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U zfaf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://zfaf:zfaf_ci@127.0.0.1:5432/zfaf?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --filter @zfaf/web exec playwright install --with-deps chromium
+
+      - name: Generate Prisma client
+        run: pnpm --filter @zfaf/db db:generate
+
+      - name: Apply migrations
+        run: pnpm --filter @zfaf/db db:deploy
+
+      - name: Build
+        run: pnpm --filter @zfaf/web build
+        env:
+          NODE_ENV: production
+
+      # The suite starts its own standalone server behind TLS — the session
+      # cookie is `__Host-` prefixed and browsers refuse that prefix over plain
+      # HTTP, so testing over HTTP would exercise a cookie production does not
+      # ship (ADR-0006).
+      - name: End-to-end (390px phone)
+        run: pnpm --filter @zfaf/web exec playwright test --project=mobile-390
+        env:
+          CHROMIUM_PATH: ''
+
+      - name: End-to-end (desktop)
+        run: pnpm --filter @zfaf/web exec playwright test --project=desktop
+        env:
+          CHROMIUM_PATH: ''
+
+      # The budgets from PRD §4.1, measured rather than estimated: the builder
+      # from the build manifest, the public page from the document it actually
+      # serves (ADR-0020).
+      - name: Performance budgets
+        run: pnpm --filter @zfaf/web bundle:check
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+
   # Proves the architectural guardrails actually fail the build. A rule that is
   # configured but not verified is a rule nobody knows is broken.
   guardrails:

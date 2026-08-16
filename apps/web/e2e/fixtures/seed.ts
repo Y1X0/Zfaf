@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { parseDraftDocument, resolveDocument, snapshotChecksum } from '@zfaf/core';
 import { getPrismaClient } from '@zfaf/db';
 
 /**
@@ -17,6 +18,13 @@ export interface SeededBuilder {
   readonly userId: string;
   readonly draftVersion: number;
 }
+
+export interface SeededPublished extends SeededBuilder {
+  readonly slug: string;
+  readonly versionId: string;
+}
+
+export type PublishedStatus = 'PUBLISHED' | 'PAUSED' | 'EXPIRED' | 'SUSPENDED' | 'DRAFT';
 
 const TEST_EMAIL_DOMAIN = 'e2e.zfaf.test';
 
@@ -218,10 +226,19 @@ export async function cleanupSeeded(): Promise<void> {
     if (userIds.length === 0) return;
 
     await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.slugHistory.deleteMany({ where: { invitation: { ownerId: { in: userIds } } } });
     await prisma.invitationMember.deleteMany({ where: { userId: { in: userIds } } });
-    await prisma.invitationVersion.deleteMany({
-      where: { invitation: { ownerId: { in: userIds } } },
+    // The pointer has to be cleared before the versions it points at can go —
+    // and the status with it, because a check constraint (rightly) refuses a
+    // PUBLISHED invitation that points at no version.
+    await prisma.invitation.updateMany({
+      where: { ownerId: { in: userIds } },
+      data: { publishedVersionId: null, status: 'DRAFT' },
     });
+    // Versions are not deleted directly: the immutability trigger (M1) refuses
+    // that while the invitation exists, and rightly — a published snapshot is
+    // append-only. Deleting the invitation cascades them, which is the only
+    // route the schema allows and therefore the one a cleanup should take.
     await prisma.invitation.deleteMany({ where: { ownerId: { in: userIds } } });
     // Audit rows are deliberately left behind: the table rejects DELETE by
     // trigger (M1), and an audit log a cleanup routine can erase is not an
@@ -245,4 +262,113 @@ export async function readDraft(invitationId: string): Promise<{
     // The factory caches one client per URL, so it is not disconnected here;
     // the process exiting closes it.
   }
+}
+
+/**
+ * A complete, filled-in draft — the starting point for publishing.
+ *
+ * Separate from `draftDocument`, which is deliberately empty because the
+ * builder tests need to type into it. Publishing needs a draft that has what
+ * an invitation must have, and nothing more.
+ */
+function filledDraft(timezone: string): Record<string, unknown> {
+  const base = draftDocument(timezone) as Record<string, unknown>;
+
+  // A countdown, because it is the one section with client behaviour and the
+  // published page's only moving part.
+  const sections = base['sections'] as Record<string, unknown>[];
+  sections.splice(1, 0, {
+    id: 'countdown',
+    type: 'countdown',
+    variant: 'countdown.ornateBoxes',
+    enabled: true,
+    order: 1,
+    props: {},
+  });
+
+  const content = base['content'] as Record<string, Record<string, unknown>>;
+  content['couple'] = { ...content['couple'], groomName: 'أحمد', brideName: 'سارة' };
+  content['wedding'] = { ...content['wedding'], date: '2026-09-20', startTime: '20:00' };
+  content['location'] = { ...content['location'], venueName: 'قاعة النخيل' };
+  return base;
+}
+
+export interface SeedPublishedOptions {
+  readonly status?: PublishedStatus;
+  readonly visibility?: 'UNLISTED' | 'INDEXED' | 'PROTECTED';
+  readonly expiresAt?: Date | null;
+  readonly slug?: string;
+}
+
+/**
+ * Seeds an invitation that has already been published.
+ *
+ * The snapshot is produced by the same `resolveDocument` the publish use case
+ * calls, and checksummed by the same function, so what the public page reads
+ * here is what publishing really writes. A fixture that hand-wrote a snapshot
+ * would be testing the fixture's idea of one.
+ *
+ * `status` is settable because the security matrix needs an expired, a paused
+ * and a suspended invitation, and there is no legitimate application path that
+ * puts an invitation into all three.
+ */
+export async function seedPublished(options: SeedPublishedOptions = {}): Promise<SeededPublished> {
+  const prisma = prismaClient();
+  const seeded = await seedBuilder();
+  const timezone = 'UTC';
+
+  const draft = filledDraft(timezone);
+  const parsed = parseDraftDocument(draft);
+  if (!parsed.ok) throw new Error(`seed draft is invalid: ${parsed.errors.join(', ')}`);
+
+  const publishedAt = new Date();
+  const resolved = resolveDocument(parsed.document, { publishedAt: publishedAt.toISOString() });
+  if (!resolved.ok) {
+    throw new Error(
+      `seed draft is not publishable: ${resolved.issues.map((i) => i.field).join(', ')}`,
+    );
+  }
+
+  const invitation = await prisma.invitation.findUniqueOrThrow({
+    where: { id: seeded.invitationId },
+    select: { templateVersionId: true },
+  });
+
+  const versionId = randomUUID();
+  await prisma.invitationVersion.create({
+    data: {
+      id: versionId,
+      invitationId: seeded.invitationId,
+      versionNumber: 1,
+      publishedDocument: resolved.snapshot as unknown as object,
+      documentChecksum: snapshotChecksum(resolved.snapshot),
+      templateVersionId: invitation.templateVersionId,
+      publishedById: seeded.userId,
+      publishedAt,
+    },
+  });
+
+  const slug = options.slug ?? `e2e-${randomUUID().slice(0, 8)}`;
+  await prisma.invitation.update({
+    where: { id: seeded.invitationId },
+    data: {
+      draftDocument: draft as object,
+      slug,
+      status: options.status ?? 'PUBLISHED',
+      visibility: options.visibility ?? 'UNLISTED',
+      publishedVersionId: versionId,
+      publishedAt,
+      expiresAt: options.expiresAt ?? null,
+    },
+  });
+
+  return { ...seeded, slug, versionId };
+}
+
+/** Retires a slug the way a rename does, so the 301 can be exercised. */
+export async function retireSlug(invitationId: string, oldSlug: string): Promise<void> {
+  const prisma = prismaClient();
+  await prisma.slugHistory.create({
+    data: { id: randomUUID(), invitationId, oldSlug, changedAt: new Date() },
+  });
 }

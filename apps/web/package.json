@@ -5,16 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build",
+    "build": "node scripts/build-public-script.mjs && next build",
     "start": "next start --port 3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test",
     "e2e:mobile": "playwright test --project=mobile-390",
-    "bundle:check": "node ../../scripts/measure-builder-bundle.mjs .",
-    "start:e2e": "node scripts/start-standalone.mjs"
+    "bundle:check": "node ../../scripts/measure-bundles.mjs .",
+    "start:e2e": "node scripts/start-standalone.mjs",
+    "build:public-script": "node scripts/build-public-script.mjs",
+    "lighthouse": "node ../../scripts/lighthouse-public-page.mjs"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@zfaf/config": "workspace:*",
     "@zfaf/core": "workspace:*",
     "@zfaf/db": "workspace:*",
@@ -27,9 +30,11 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

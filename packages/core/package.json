@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./countdown": "./src/invitation/domain/event-date-time.ts"
   },
   "scripts": {
     "lint": "eslint .",

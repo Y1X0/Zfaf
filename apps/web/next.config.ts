@@ -46,6 +46,11 @@ const nextConfig: NextConfig = {
       '../../packages/db/node_modules/.prisma/client/**',
       '../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/*.node',
     ],
+    // The link-preview card is rasterised from a font file read at runtime, so
+    // nothing statically references it and the tracer cannot see it. Without
+    // this, every preview falls back to the generic card in production while
+    // looking perfect in development.
+    '/i/[slug]/og/route': ['./assets/fonts/Amiri-Regular.ttf'],
   },
 
   // Native and heavyweight modules stay on the Node runtime rather than being
@@ -57,6 +62,8 @@ const nextConfig: NextConfig = {
     '@prisma/client',
     '@aws-sdk/client-s3',
     '@aws-sdk/s3-request-presigner',
+    // A Rust binding; webpack cannot parse a `.node` binary.
+    '@resvg/resvg-js',
   ],
   webpack(config: { resolve?: { extensionAlias?: Record<string, string[]> } }) {
     // Our TypeScript is configured for NodeNext, so every relative import ends

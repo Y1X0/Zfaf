@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { EventDateTime, countdownParts, wallClockToInstant } from './event-date-time.js';
+import {
+  EventDateTime,
+  clockSkew,
+  correctedNow,
+  countdownParts,
+  wallClockToInstant,
+} from './event-date-time.js';
 
 /**
  * Time is the area where this product is most likely to be quietly wrong: a
@@ -206,5 +212,94 @@ describe('countdownParts', () => {
       seconds: 0,
       totalMilliseconds: 0,
     });
+  });
+});
+
+describe('clock correction (D6.9)', () => {
+  const serverNow = new Date('2026-08-16T10:00:00.000Z');
+
+  it('ignores a difference small enough to be network latency', () => {
+    // Chasing the round trip would make the countdown twitch by a second for
+    // no reason a guest could perceive.
+    expect(clockSkew(serverNow, new Date(serverNow.getTime() - 900))).toBe(0);
+    expect(clockSkew(serverNow, new Date(serverNow.getTime() + 900))).toBe(0);
+  });
+
+  it('measures a device clock that is genuinely wrong', () => {
+    const anHourBehind = new Date(serverNow.getTime() - 3_600_000);
+    expect(clockSkew(serverNow, anHourBehind)).toBe(3_600_000);
+
+    const aDayAhead = new Date(serverNow.getTime() + 86_400_000);
+    expect(clockSkew(serverNow, aDayAhead)).toBe(-86_400_000);
+  });
+
+  it('corrects the offset while trusting the device to keep ticking', () => {
+    const deviceAtLoad = new Date(serverNow.getTime() - 3_600_000);
+    const skew = clockSkew(serverNow, deviceAtLoad);
+
+    // Ten seconds later by the device's own reckoning.
+    const deviceLater = new Date(deviceAtLoad.getTime() + 10_000);
+    expect(correctedNow(deviceLater, skew).toISOString()).toBe('2026-08-16T10:00:10.000Z');
+  });
+
+  it('keeps a badly-set phone from showing the wrong countdown', () => {
+    // The most visible possible bug: an invitation telling a guest the wedding
+    // was yesterday because their phone's date is wrong.
+    const event = EventDateTime.create({
+      date: '2026-09-20',
+      startTime: '20:00',
+      timezone: 'Asia/Riyadh',
+    });
+    expect(event.ok).toBe(true);
+    if (!event.ok) return;
+
+    // A phone set two months fast would put the wedding in the past.
+    const phone = new Date('2026-10-16T10:00:00.000Z');
+    expect(event.value.hasPassed(phone)).toBe(true);
+
+    const skew = clockSkew(serverNow, phone);
+    expect(event.value.hasPassed(correctedNow(phone, skew))).toBe(false);
+    expect(countdownParts(event.value.toInstant(), correctedNow(phone, skew)).days).toBe(35);
+  });
+
+  it('survives the event’s own time zone changing its offset before the date', () => {
+    // A DST transition between now and the wedding must not move the wedding:
+    // the instant is derived from the wall-clock time and the tz database, not
+    // from a stored offset.
+    const event = EventDateTime.create({
+      date: '2026-08-01',
+      startTime: '20:00',
+      timezone: 'Europe/London',
+    });
+    expect(event.ok).toBe(true);
+    if (!event.ok) return;
+    // 20:00 BST is 19:00 UTC — an implementation that ignored DST would say 20:00Z.
+    expect(event.value.toInstant().toISOString()).toBe('2026-08-01T19:00:00.000Z');
+
+    const winter = EventDateTime.create({
+      date: '2026-12-01',
+      startTime: '20:00',
+      timezone: 'Europe/London',
+    });
+    expect(winter.ok).toBe(true);
+    if (!winter.ok) return;
+    expect(winter.value.toInstant().toISOString()).toBe('2026-12-01T20:00:00.000Z');
+  });
+
+  it('counts down to the same instant for guests in different time zones', () => {
+    // A guest in London and a guest in Riyadh must see the same number: the
+    // countdown is to an instant, and only its presentation is local.
+    const event = EventDateTime.create({
+      date: '2026-09-20',
+      startTime: '20:00',
+      timezone: 'Asia/Riyadh',
+    });
+    expect(event.ok).toBe(true);
+    if (!event.ok) return;
+
+    const instant = new Date('2026-09-19T20:00:00.000Z');
+    expect(countdownParts(event.value.toInstant(), instant).totalMilliseconds).toBe(
+      86_400_000 - 3 * 3_600_000,
+    );
   });
 });

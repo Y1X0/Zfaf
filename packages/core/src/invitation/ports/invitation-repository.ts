@@ -24,8 +24,13 @@ export interface InvitationRecord {
   readonly title: string;
   readonly status: InvitationStatus;
   readonly templateKey: string;
-  readonly templateVersion: number;
-  /** The pinned template version row; frozen into every snapshot published. */
+  /**
+   * The pinned template version row; frozen into every snapshot published.
+   *
+   * The version *number* is deliberately absent here: the draft document
+   * carries it, that is what the projection reads, and a second copy on the
+   * record could only ever disagree with the first.
+   */
   readonly templateVersionId: string;
   readonly locale: 'ar' | 'en';
   readonly marketCode: string;
@@ -97,6 +102,10 @@ export type PublishOutcome =
   | { readonly ok: true; readonly versionId: string; readonly versionNumber: number }
   | { readonly ok: false; readonly error: 'SLUG_TAKEN' | 'NOT_FOUND' | 'ILLEGAL_TRANSITION' };
 
+export type RollbackOutcome =
+  | { readonly ok: true; readonly versionId: string; readonly versionNumber: number }
+  | { readonly ok: false; readonly error: 'NOT_FOUND' | 'NO_SUCH_VERSION' | 'NOT_PUBLISHED' };
+
 export type UpdateDraftOutcome =
   | { readonly ok: true; readonly draftVersion: number }
   | {
@@ -118,6 +127,16 @@ export interface InvitationRepository {
   findPublishedBySlug(slug: string): Promise<PublicInvitationView | null>;
   /** Resolves a renamed slug so links already sent keep working (ADR-0013). */
   findSlugRedirect(oldSlug: string): Promise<string | null>;
+
+  /**
+   * Whether a slug could be claimed right now.
+   *
+   * Advisory only, for the publish dialog. It is never the thing that makes
+   * publishing safe — a check here and a write a second later is a race, so
+   * uniqueness is enforced by the database index and this only exists to spare
+   * the owner a pointless round trip (ADR-0013).
+   */
+  isSlugAvailable(slug: string): Promise<boolean>;
 
   // ── Writes, all scoped. ──
   create(input: CreateInvitationInput): Promise<InvitationRecord>;
@@ -148,6 +167,45 @@ export interface InvitationRepository {
     id: string,
     scope: TenantScope,
     next: InvitationStatus,
+    now: Date,
+  ): Promise<boolean>;
+
+  /**
+   * Points the invitation back at an earlier version (D6.3).
+   *
+   * A pointer move and nothing else: the version being left is not deleted and
+   * the version being returned to is not rewritten. Rolling back is itself
+   * reversible, which is the property that makes it safe to offer at all.
+   */
+  rollbackToVersion(
+    id: string,
+    scope: TenantScope,
+    versionNumber: number,
+    now: Date,
+  ): Promise<RollbackOutcome>;
+
+  /**
+   * Expires invitations whose date has passed. Returns the ids it changed.
+   *
+   * The one write on this port with no `TenantScope`, and the exception needs
+   * its justification stated: it is a scheduled system task, it moves only
+   * PUBLISHED to EXPIRED, and only for rows whose own `expiresAt` has already
+   * passed. It reads no content and returns no content, so there is nothing
+   * for a missing scope to leak. Anything broader belongs on a scoped method.
+   */
+  expireDueInvitations(now: Date, limit: number): Promise<readonly string[]>;
+
+  /**
+   * Changes who may find the invitation (ADR-0017).
+   *
+   * A column on the invitation rather than a field in the document, because it
+   * is not part of what guests see — it decides how the response is served,
+   * and it must be changeable without publishing a new version.
+   */
+  setVisibility(
+    id: string,
+    scope: TenantScope,
+    visibility: 'UNLISTED' | 'INDEXED',
     now: Date,
   ): Promise<boolean>;
 

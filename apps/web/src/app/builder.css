@@ -510,6 +510,80 @@ body {
   }
 }
 
+/* ── publishing (D6.5, D6.7, D6.8) ──────────────────────────────────────── */
+
+/*
+ * The honesty notice is styled to be *read*, not dismissed.
+ *
+ * It carries the sentence ADR-0017 requires wherever an owner is about to
+ * share a link, and it deliberately uses a neutral, informative treatment
+ * rather than a warning colour: this is how the product works, not an error,
+ * and dressing it as an alert would teach people to click past it.
+ */
+.zfb-honesty {
+  margin-block: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-inline-start: 3px solid var(--zfb-accent);
+  background: var(--zfb-surface);
+  border-radius: 0 var(--zfb-radius) var(--zfb-radius) 0;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--zfb-text);
+}
+
+.zfb-published {
+  margin-block-start: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--zfb-border);
+  border-radius: var(--zfb-radius);
+}
+
+.zfb-published__link {
+  display: block;
+  margin-block: 0.5rem;
+  overflow-wrap: anywhere;
+  color: var(--zfb-accent);
+}
+
+.zfb-published__actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.zfb-published__actions .zfb-btn {
+  text-align: center;
+  text-decoration: none;
+  min-block-size: var(--zfb-tap);
+  display: grid;
+  place-items: center;
+}
+
+.zfb-visibility {
+  margin-block-start: 1.25rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--zfb-border);
+}
+
+.zfb-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-block-size: var(--zfb-tap);
+}
+
+/*
+ * A native checkbox renders about 13px tall, which is not tappable. Sizing the
+ * control itself rather than only its label keeps the 44px rule true for the
+ * thing a thumb actually has to hit.
+ */
+.zfb-toggle input[type='checkbox'] {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  min-block-size: var(--zfb-tap);
+  min-inline-size: var(--zfb-tap);
+  accent-color: var(--zfb-accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

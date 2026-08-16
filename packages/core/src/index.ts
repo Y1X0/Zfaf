@@ -18,7 +18,12 @@ export * from './invitation/domain/event-date-time.js';
 export * from './invitation/domain/published-snapshot.js';
 export * from './invitation/domain/document-patch.js';
 export * from './invitation/domain/draft-document.js';
+export * from './invitation/domain/snapshot-checksum.js';
+export * from './invitation/domain/resolve-document.js';
+export * from './invitation/domain/public-access.js';
 export * from './invitation/usecases/update-draft.js';
+export * from './invitation/usecases/publish-invitation.js';
+export * from './invitation/usecases/manage-publication.js';
 export * from './invitation/ports/invitation-repository.js';
 
 // ── template domain (ADR-0004) ──────────────────────────────────────────────

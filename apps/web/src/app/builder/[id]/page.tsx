@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 
+import { getEnv } from '@zfaf/config';
 import { tenantScopeFor } from '@zfaf/core';
 
 import { Builder } from '../../../builder/Builder.js';
@@ -41,6 +42,8 @@ export default async function BuilderPage({
       title={invitation.title}
       initialDocument={invitation.draftDocument}
       initialVersion={invitation.draftVersion}
+      initialSlug={invitation.slug}
+      publishedBaseUrl={getEnv().PUBLIC_BASE_URL}
     />
   );
 }
