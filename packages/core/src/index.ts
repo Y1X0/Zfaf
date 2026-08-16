@@ -31,3 +31,18 @@ export * from './billing/ports/payment-provider.js';
 
 // ── media (ADR-0007) ────────────────────────────────────────────────────────
 export * from './media/ports/storage-provider.js';
+
+// ── identity (ADR-0006, ADR-0018) ───────────────────────────────────────────
+export * from './identity/domain/email.js';
+export * from './identity/domain/password-policy.js';
+export * from './identity/domain/account-status.js';
+export * from './identity/domain/session.js';
+export * from './identity/ports/password-hasher.js';
+export * from './identity/ports/token-generator.js';
+export * from './identity/ports/rate-limiter.js';
+export * from './identity/ports/identity-repositories.js';
+export * from './identity/ports/mail-service.js';
+export * from './identity/usecases/authenticate.js';
+export * from './identity/usecases/session-lifecycle.js';
+export * from './identity/usecases/credentials.js';
+export * from './authz/tenant-context.js';

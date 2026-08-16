@@ -25,7 +25,8 @@
     "typescript": "^5.7.0",
     "vitest": "^3.0.0",
     "prisma": "^6.2.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "@zfaf/infra": "workspace:*"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

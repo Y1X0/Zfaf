@@ -8,3 +8,4 @@
  */
 export * from './client.js';
 export * from './repositories/invitation.repository.js';
+export * from './repositories/identity.repository.js';
