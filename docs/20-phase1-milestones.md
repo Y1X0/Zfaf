@@ -14,7 +14,7 @@
 
 | M | العنوان | جهد | يحجب | حالة |
 |:-:|---------|----:|------|:----:|
-| **M0** | Foundation & Toolchain | 2.0 | كل شيء | ⬜ |
+| **M0** | Foundation & Toolchain | 2.0 | كل شيء | ✅ |
 | **M1** | Data Layer & Domain Core | 2.0 | M2–M9 | ⬜ |
 | **M2** | Identity & Authorization | 2.0 | M5, M6, M8 | ⬜ |
 | **M3** | **Template Engine + Renderer** ⭐ | 3.5 | M5, M6 | ⬜ |
@@ -83,6 +83,29 @@
 ### Exit Criteria
 > ✅ **مهندس جديد ينفّذ `git clone` ويصل إلى تطبيق يعمل وCI أخضر خلال 10 دقائق،
 > وكل قاعدة حدود مثبتة بفشل مُتعمَّد واحد على الأقل.**
+
+### ✅ نتيجة التنفيذ (2026-08-16)
+
+| البند | الحالة | الدليل |
+|-------|:------:|--------|
+| `pnpm install` | ✅ | 11 ثانية، 8 حزم في مساحة العمل |
+| `pnpm test` | ✅ | **46/46** اختبار يمر |
+| `pnpm lint` | ✅ | صفر أخطاء، صفر تحذيرات |
+| `pnpm typecheck` | ✅ | 7 حزم، TypeScript strict |
+| `pnpm boundaries` | ✅ | صفر مخالفات (20 وحدة، 10 تبعيات) |
+| `pnpm guardrails` | ✅ | **9/9 حاجز يرفض مخالفة متعمَّدة** |
+| `pnpm build` | ✅ | Next.js standalone، 102KB First Load JS |
+| `pnpm dev` + فحص صحة | ✅ | `{"status":"ok"}` + الترويسات الأمنية + `<html lang="ar" dir="rtl">` |
+| `docker compose up` | ⚠️ | **لم يُنفَّذ** — لا Docker daemon في بيئة التطوير الحالية. الملف مُتحقَّق منه بـ `docker compose config` |
+
+**الحواجز المُثبتة عملياً (كل واحد رفض ملفاً مخالفاً متعمَّداً):**
+```
+✓ استيراد Prisma داخل packages/core          ✓ استيراد Next داخل packages/core
+✓ خاصية CSS فيزيائية في apps/web             ✓ Date.now() داخل packages/core
+✓ صنف Tailwind فيزيائي في apps/web           ✓ التفريع على اسم الباقة
+✓ قيم سوق مُبرمَجة ("SAR", "Asia/Riyadh")    ✓ dangerouslySetInnerHTML
+✓ ثابت ضريبي مُبرمَج (VAT_RATE)
+```
 
 ---
 
@@ -697,7 +720,7 @@ M0 Foundation
 
 | M | العنوان | جهد | حالة | Exit Criteria |
 |:-:|---------|----:|:----:|:-------------:|
-| M0 | Foundation | 2.0 | ⬜ | ⬜ |
+| M0 | Foundation | 2.0 | ✅ | ✅¹ |
 | M1 | Data & Domain | 2.0 | ⬜ | ⬜ |
 | M2 | Identity | 2.0 | ⬜ | ⬜ |
 | M3 | Template Engine ⭐ | 3.5 | ⬜ | ⬜ 🚦 |
@@ -708,3 +731,9 @@ M0 Foundation
 | M8 | Analytics + Admin | 1.0 | ⬜ | ⬜ |
 | M9 | i18n & Polish | 1.5 | ⬜ | ⬜ |
 | M10 | Production Ready | 1.5 | ⬜ | ⬜ |
+
+¹ **M0 مكتمل باستثناء بند واحد لا يمكن إثباته في بيئة التطوير الحالية:**
+`docker compose up` لم يُنفَّذ لأن Docker daemon غير متاح في هذه البيئة (الـ CLI موجود، الخدمة لا).
+تم التحقق من صحة ملف الـ compose عبر `docker compose config` فقط.
+**يجب تشغيل `pnpm db:up` والتأكد من إقلاع الخدمات الأربع على جهاز به Docker قبل بدء M1**،
+لأن M1 يحتاج Postgres حقيقياً لاختبارات التكامل.

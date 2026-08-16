@@ -1,0 +1,19 @@
+{
+  "name": "eslint-plugin-zfaf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "rules"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "echo \"no types in eslint-plugin-zfaf\""
+  },
+  "devDependencies": {
+    "eslint": "^9.17.0",
+    "vitest": "^3.0.0"
+  }
+}

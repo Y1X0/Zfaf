@@ -108,6 +108,59 @@ tests/                  E2E + security suites
 
 ---
 
+## 🛠 التطوير المحلي
+
+### المتطلبات
+Node **22+** · pnpm **10+** · Docker (لـ Postgres و Redis و MinIO و Mailpit)
+
+### البدء
+
+```bash
+pnpm install
+cp .env.example .env      # القيم الافتراضية تعمل مع docker compose كما هي
+pnpm db:up                # postgres · redis · minio · mailpit
+pnpm dev                  # web على :3000 · worker
+```
+
+| الخدمة | العنوان |
+|--------|---------|
+| التطبيق | http://localhost:3000 |
+| فحص الصحة | http://localhost:3000/api/health |
+| MinIO console | http://localhost:9001 |
+| Mailpit (البريد الملتقط) | http://localhost:8025 |
+
+### الأوامر
+
+| الأمر | الغرض |
+|-------|-------|
+| `pnpm verify` | **كل الفحوص** — التنسيق، lint، الأنواع، الحدود، الاختبارات، الحواجز |
+| `pnpm test` | اختبارات الوحدة |
+| `pnpm lint` · `pnpm typecheck` | فحوص فردية |
+| `pnpm boundaries` | حدود الوحدات (dependency-cruiser) |
+| `pnpm guardrails` | **يثبت أن الحواجز المعمارية ترفض المخالفات فعلاً** |
+| `pnpm build` | بناء الإنتاج |
+| `pnpm db:up` / `db:down` / `db:reset` | خدمات التطوير |
+
+> شغّل `pnpm verify` قبل أي push — هي نفس ما يشغّله CI.
+
+### الحواجز المعمارية
+
+هذه ليست تفضيلات أسلوب. كل قاعدة تمنع فئة أخطاء موثّقة في ADR، و`pnpm guardrails`
+يكتب ملفات مخالفة عمداً ويتأكد أن الأدوات ترفضها — **قاعدة مُعدّة لكن غير مُختبَرة
+هي قاعدة لا أحد يعرف أنها تعطّلت.**
+
+| الحاجز | يمنع | المرجع |
+|--------|------|--------|
+| `zfaf/no-physical-css-properties` | `margin-left`, `ml-4`, `text-align: left` | [ADR-0011](docs/adr/0011-i18n-and-rtl-strategy.md) |
+| `zfaf/no-dangerous-html` | `dangerouslySetInnerHTML` | [ADR-0004](docs/adr/0004-json-template-manifest.md) |
+| `zfaf/no-prisma-outside-db` | استيراد Prisma خارج `packages/db` | [ADR-0003](docs/adr/0003-postgresql-and-prisma.md) |
+| `zfaf/no-market-literals` | `"SAR"`, `"+966"`, `"Asia/Riyadh"`, `VAT_RATE` | [ADR-0015](docs/adr/0015-market-configuration-model.md) |
+| `no-restricted-imports` في `core` | استيراد Next/React/db في النطاق | [ADR-0002](docs/adr/0002-nextjs-fullstack-over-separate-api.md) |
+| `no-restricted-properties` في `core` | `Date.now()` و `Math.random()` | [ADR-0004](docs/adr/0004-json-template-manifest.md) |
+| `no-restricted-syntax` | `user.plan === 'premium'` | [ADR-0014](docs/adr/0014-entitlements-over-plan-checks.md) |
+
+---
+
 ## قواعد المساهمة الأساسية
 
 - ❌ لا secrets في Git — إطلاقاً. (`gitleaks` في CI كـ required check)
