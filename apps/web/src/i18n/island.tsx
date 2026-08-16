@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages } from 'next-intl/server';
+import { getLocale, getMessages } from 'next-intl/server';
 
 /**
  * Hands a client island only the messages it uses (D9.1).
@@ -21,11 +21,27 @@ export async function IslandMessages({
   readonly namespaces: readonly string[];
   readonly children: ReactNode;
 }): Promise<ReactElement> {
-  const all = (await getMessages()) as Record<string, unknown>;
+  const [locale, all] = await Promise.all([
+    getLocale(),
+    getMessages() as Promise<Record<string, unknown>>,
+  ]);
   const picked: Record<string, unknown> = {};
   for (const namespace of namespaces) {
     if (namespace in all) picked[namespace] = all[namespace];
   }
 
-  return <NextIntlClientProvider messages={picked}>{children}</NextIntlClientProvider>;
+  /**
+   * `locale` is passed explicitly.
+   *
+   * The provider can inherit it from the server context, but only when it is
+   * rendered directly in the request's React tree — and this one sits inside a
+   * shared component that is also reached during static generation, where the
+   * inherited value is not there to read. Passing it makes the boundary
+   * self-contained instead of dependent on where it happens to be mounted.
+   */
+  return (
+    <NextIntlClientProvider locale={locale} messages={picked}>
+      {children}
+    </NextIntlClientProvider>
+  );
 }

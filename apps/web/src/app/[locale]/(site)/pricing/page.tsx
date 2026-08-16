@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
+import type { Locale } from '../../../../i18n/routing.js';
 import { SiteShell } from '../SiteShell.js';
 
 /**
@@ -12,11 +13,16 @@ import { SiteShell } from '../SiteShell.js';
  * would be inventing a commitment no decision has made — so the page says what
  * is true: the pricing model, and that the figures come before launch.
  */
-export default function PricingPage(): ReactElement {
-  const t = useTranslations('marketing.pricing');
+export default async function PricingPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<ReactElement> {
+  const { locale: raw } = await params;
+  const t = await getTranslations('marketing.pricing');
 
   return (
-    <SiteShell>
+    <SiteShell locale={raw as Locale} path="/pricing">
       <div className="zf-prose">
         <h1>{t('title')}</h1>
         <p>{t('subtitle')}</p>

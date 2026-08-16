@@ -1,8 +1,9 @@
+import { hasLocale } from 'next-intl';
 import { getRequestConfig } from 'next-intl/server';
 
 import { activeMarkets, getMarket } from '@zfaf/core';
 
-import { DEFAULT_LOCALE } from './routing.js';
+import { DEFAULT_LOCALE, routing } from './routing.js';
 
 /**
  * Loads the message catalogue for a request (D9.1).
@@ -22,18 +23,17 @@ import en from './messages/en.json' with { type: 'json' };
 
 const CATALOGUES = { ar, en } as const;
 
-export default getRequestConfig(async () => {
+export default getRequestConfig(async ({ requestLocale }) => {
+  const requested = await requestLocale;
   /**
-   * Arabic, for every request — for now.
+   * An unrecognised locale falls back to Arabic rather than throwing.
    *
-   * The English catalogue is complete and checked for parity in CI, but no
-   * route serves it yet: locale routing is the one part of this milestone that
-   * is not finished (see docs/20 §M9). Resolving the default here rather than
-   * from a request header keeps the product on the language it is built for
-   * instead of guessing from `Accept-Language`, which in the Gulf sends a great
-   * many Arabic readers to an English site they did not ask for.
+   * The `[locale]` layout already answers 404 for a wrong prefix, so by the
+   * time this runs the value is either valid or absent — absent on the
+   * surfaces deliberately outside locale routing (`/admin`, and the
+   * `/_not-found` page Next prerenders with no segment of its own).
    */
-  const locale = DEFAULT_LOCALE;
+  const locale = hasLocale(routing.locales, requested) ? requested : DEFAULT_LOCALE;
 
   return {
     locale,

@@ -9,11 +9,10 @@ import { type Page, expect, test } from '@playwright/test';
  * `.zf-hero__arch` defect in M6 pushed every Arabic invitation 276px off screen
  * while looking perfect in English.
  *
- * **English is not exercised here, and that is a gap rather than a decision.**
- * The catalogue is complete and CI checks it key-for-key, but no route serves
- * it: locale routing is the unfinished part of M9 (see docs/20 §M9). These
- * tests are written so that adding the English half is adding a locale to one
- * array.
+ * Both languages are exercised, because that is where these bugs live: a
+ * right-to-left mistake is invisible in the language the developer was looking
+ * at and obvious in the other. Routing itself is covered separately, in
+ * `locale-routing.spec.ts`, which guards the D9.1 standalone defect.
  */
 
 /** Every public page, in the order a visitor meets them. */
@@ -55,7 +54,10 @@ test('Arabic is served at the root, with no redirect and no prefix', async ({ pa
 // ── every page ─────────────────────────────────────────────────────────────
 
 for (const path of PAGES) {
-  for (const [locale, url] of [['ar', path]] as const) {
+  for (const [locale, url] of [
+    ['ar', path],
+    ['en', path === '/' ? '/en' : `/en${path}`],
+  ] as const) {
     test(`${url} renders in ${locale} with no horizontal overflow`, async ({ page }) => {
       const response = await page.goto(url);
       expect(response?.status()).toBe(200);
@@ -161,10 +163,15 @@ test('the Arabic font is self-hosted and preloaded', async ({ page }) => {
 
 // ── error pages (D9.7) ──────────────────────────────────────────────────────
 
-test('a mistyped address gets the translated 404', async ({ page }) => {
-  const response = await page.goto('/no-such-page');
-  expect(response?.status()).toBe(404);
-  await expect(page.getByTestId('error-not-found')).toContainText('الصفحة غير موجودة');
+test('a mistyped address gets a translated 404 in each language', async ({ page }) => {
+  for (const [url, marker] of [
+    ['/no-such-page', 'الصفحة غير موجودة'],
+    ['/en/no-such-page', 'Page not found'],
+  ] as const) {
+    const response = await page.goto(url);
+    expect(response?.status()).toBe(404);
+    await expect(page.getByTestId('error-not-found')).toContainText(marker);
+  }
 });
 
 // ── the surfaces that must NOT be localised ─────────────────────────────────

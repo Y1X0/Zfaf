@@ -70,9 +70,29 @@ if (!existsSync(keyPath) || !existsSync(certPath)) {
   );
 }
 
+/**
+ * `HOSTNAME=localhost`, and it is load-bearing rather than cosmetic.
+ *
+ * Next builds the URL it hands to middleware from `fetchHostname ||
+ * 'localhost'`, and separately builds `initURL` — the base it compares a
+ * middleware rewrite against — from the configured hostname. When the two
+ * differ, `parseRelativeURL` sees two origins, marks the rewrite **external**,
+ * and Next re-requests it over the network instead of rendering it in place.
+ *
+ * Bound to `127.0.0.1` the two disagree (`127.0.0.1` vs `localhost`), so every
+ * locale rewrite became an outbound request — which, with `x-forwarded-proto:
+ * https` set by the terminator below, meant Next trying to speak TLS to its own
+ * plain-HTTP port. That surfaced as `EPROTO` behind TLS and as a 307 loop over
+ * plain HTTP, and it is why `/` was unreachable while `/en` worked.
+ *
+ * Naming the host `localhost` makes both identities the same string, the
+ * rewrite resolves as relative, and it is handled internally with no network
+ * hop at all. `localhost` still binds loopback, so nothing outside this machine
+ * can reach the upstream — only the TLS terminator can.
+ */
 const child = spawn(process.execPath, [join(standalone, 'server.js')], {
   stdio: 'inherit',
-  env: { ...process.env, PORT: String(upstreamPort), HOSTNAME: '127.0.0.1' },
+  env: { ...process.env, PORT: String(upstreamPort), HOSTNAME: 'localhost' },
 });
 
 const proxy = createServer(
@@ -96,8 +116,23 @@ const proxy = createServer(
          * the one the browser used, which is what a real load balancer does
          * and what makes an internal rewrite stay internal.
          */
+        /**
+         * The upstream is addressed by the name it knows itself by.
+         *
+         * `host` is rewritten to `localhost:<upstream>` deliberately: Next
+         * compares a middleware rewrite's origin against a base built from its
+         * own hostname, and a mismatch turns an internal rewrite into an
+         * outbound request. The public origin the application should print in
+         * links comes from `PUBLIC_BASE_URL`, not from this header — which is
+         * why M6 made `baseUrl()` prefer configuration over the request.
+         *
+         * `x-forwarded-proto` still tells the app it is behind TLS, so the
+         * `Secure` session cookie it sets is consistent with the connection the
+         * browser actually made.
+         */
         headers: {
           ...incoming.headers,
+          host: `localhost:${upstreamPort}`,
           'x-forwarded-proto': 'https',
           'x-forwarded-host': `127.0.0.1:${publicPort}`,
         },

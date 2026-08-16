@@ -2,11 +2,11 @@ import { notFound } from 'next/navigation';
 
 import { can, tenantScopeFor } from '@zfaf/core';
 
-import { RsvpDashboard } from '../../../../../dashboard/RsvpDashboard.js';
-import { IslandMessages } from '../../../../../i18n/island.js';
-import { container } from '../../../../../server/container.js';
-import { requireActor } from '../../../../../server/request-context.js';
-import '../../../../dashboard.css';
+import { RsvpDashboard } from '../../../../../../../dashboard/RsvpDashboard.js';
+import { IslandMessages } from '../../../../../../../i18n/island.js';
+import { container } from '../../../../../../../server/container.js';
+import { requireActor } from '../../../../../../../server/request-context.js';
+import '../../../../../../dashboard.css';
 
 /**
  * The replies page (D7.5).

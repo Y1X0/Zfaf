@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
+import type { Locale } from '../../../../i18n/routing.js';
 import { SiteShell } from '../SiteShell.js';
 
 /**
@@ -19,12 +20,17 @@ const LAST_UPDATED = '2026-08-16';
 
 const SECTIONS = ['s1', 's2', 's3', 's4', 's5', 's6'] as const;
 
-export default function TermsPage(): ReactElement {
-  const t = useTranslations('legal.terms');
-  const legal = useTranslations('legal');
+export default async function TermsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<ReactElement> {
+  const { locale: raw } = await params;
+  const t = await getTranslations('legal.terms');
+  const legal = await getTranslations('legal');
 
   return (
-    <SiteShell>
+    <SiteShell locale={raw as Locale} path="/terms">
       <article className="zf-prose zf-legal">
         <h1>{t('title')}</h1>
         <p className="zf-legal__updated">{legal('updated', { date: LAST_UPDATED })}</p>

@@ -3,11 +3,11 @@ import { notFound } from 'next/navigation';
 import { getEnv } from '@zfaf/config';
 import { tenantScopeFor } from '@zfaf/core';
 
-import { Builder } from '../../../builder/Builder.js';
-import { IslandMessages } from '../../../i18n/island.js';
-import { container } from '../../../server/container.js';
-import { requireActor } from '../../../server/request-context.js';
-import '../../builder.css';
+import { Builder } from '../../../../../builder/Builder.js';
+import { IslandMessages } from '../../../../../i18n/island.js';
+import { container } from '../../../../../server/container.js';
+import { requireActor } from '../../../../../server/request-context.js';
+import '../../../../builder.css';
 
 /**
  * The builder page.

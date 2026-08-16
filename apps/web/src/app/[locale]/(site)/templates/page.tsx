@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
+import type { Locale } from '../../../../i18n/routing.js';
 import { SiteShell } from '../SiteShell.js';
 
 /**
@@ -11,11 +12,16 @@ import { SiteShell } from '../SiteShell.js';
  * surface the milestone plan does not build here — and a page of placeholder
  * images is a promise the product has not made yet.
  */
-export default function TemplatesPage(): ReactElement {
-  const t = useTranslations('marketing.templates');
+export default async function TemplatesPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<ReactElement> {
+  const { locale: raw } = await params;
+  const t = await getTranslations('marketing.templates');
 
   return (
-    <SiteShell>
+    <SiteShell locale={raw as Locale} path="/templates">
       <div className="zf-prose">
         <h1>{t('title')}</h1>
         <p>{t('subtitle')}</p>

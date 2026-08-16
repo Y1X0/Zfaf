@@ -33,6 +33,10 @@ await build({
   // syntax error on a device that would otherwise have shown the invitation.
   // Safari 15 rather than 14: esbuild will not emit destructuring for 14,
   // because that release shipped it broken in some positions.
+  // The same floor `browserslist` in package.json gives Next, kept in step on
+  // purpose: two different answers to "which browsers do we support" is how a
+  // page ends up shipping 39 KB of polyfills for browsers the rest of the
+  // build already assumes away.
   target: ['es2020', 'safari15', 'chrome91', 'firefox90'],
   legalComments: 'none',
   logLevel: 'warning',

@@ -11,7 +11,7 @@ import {
   envelope,
   isBuilderMessage,
   readEnvelope,
-} from '../../../builder/preview-bridge.js';
+} from '../../../../../builder/preview-bridge.js';
 
 /**
  * The page inside the preview iframe (D5.8).

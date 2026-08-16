@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
-import Link from 'next/link';
+import { localePath } from '../../../i18n/href.js';
+import type { Locale } from '../../../i18n/routing.js';
 import { SiteShell } from './SiteShell.js';
 
 /**
@@ -18,21 +19,27 @@ import { SiteShell } from './SiteShell.js';
  * guests reply without an account (the RSVP suite), and we set no cookies —
  * which the analytics suite reads out of a real browser.
  */
-export default function HomePage(): ReactElement {
-  const t = useTranslations('marketing');
+export default async function HomePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<ReactElement> {
+  const { locale: raw } = await params;
+  const locale = raw as Locale;
+  const t = await getTranslations('marketing');
 
   return (
-    <SiteShell>
+    <SiteShell locale={locale} path="/">
       <section className="zf-hero">
         <h1>{t('hero.title')}</h1>
         <p>{t('hero.subtitle')}</p>
         <div className="zf-cta">
-          <Link className="zf-btn" href="/pricing">
+          <a className="zf-btn" href={localePath(locale, '/pricing')}>
             {t('hero.cta')}
-          </Link>
-          <Link className="zf-btn zf-btn--quiet" href="/templates">
+          </a>
+          <a className="zf-btn zf-btn--quiet" href={localePath(locale, '/templates')}>
             {t('hero.secondary')}
-          </Link>
+          </a>
         </div>
       </section>
 

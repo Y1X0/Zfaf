@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
+import type { Locale } from '../../../../i18n/routing.js';
 import { SiteShell } from '../SiteShell.js';
 
 /**
@@ -16,11 +17,16 @@ import { SiteShell } from '../SiteShell.js';
  */
 const QUESTIONS = ['q1', 'q2', 'q3', 'q4', 'q5'] as const;
 
-export default function FaqPage(): ReactElement {
-  const t = useTranslations('marketing.faq');
+export default async function FaqPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<ReactElement> {
+  const { locale: raw } = await params;
+  const t = await getTranslations('marketing.faq');
 
   return (
-    <SiteShell>
+    <SiteShell locale={raw as Locale} path="/faq">
       <div className="zf-prose zf-faq">
         <h1>{t('title')}</h1>
         {QUESTIONS.map((key) => (

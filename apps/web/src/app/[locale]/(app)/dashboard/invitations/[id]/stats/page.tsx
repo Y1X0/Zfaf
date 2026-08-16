@@ -4,9 +4,9 @@ import { getTranslations } from 'next-intl/server';
 
 import { invitationStatsPanel } from '@zfaf/core';
 
-import { container } from '../../../../../server/container.js';
-import { requireActor } from '../../../../../server/request-context.js';
-import '../../../../dashboard.css';
+import { container } from '../../../../../../../server/container.js';
+import { requireActor } from '../../../../../../../server/request-context.js';
+import '../../../../../../dashboard.css';
 
 /**
  * The stats panel (D8.4).

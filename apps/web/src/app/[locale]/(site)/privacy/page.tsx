@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
+import type { Locale } from '../../../../i18n/routing.js';
 import { SiteShell } from '../SiteShell.js';
 
 /**
@@ -27,12 +28,17 @@ const LAST_UPDATED = '2026-08-16';
 
 const SECTIONS = ['s1', 's2', 's3', 's4', 's5', 's6'] as const;
 
-export default function PrivacyPage(): ReactElement {
-  const t = useTranslations('legal.privacy');
-  const legal = useTranslations('legal');
+export default async function PrivacyPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<ReactElement> {
+  const { locale: raw } = await params;
+  const t = await getTranslations('legal.privacy');
+  const legal = await getTranslations('legal');
 
   return (
-    <SiteShell>
+    <SiteShell locale={raw as Locale} path="/privacy">
       <article className="zf-prose zf-legal">
         <h1>{t('title')}</h1>
         <p className="zf-legal__updated">{legal('updated', { date: LAST_UPDATED })}</p>

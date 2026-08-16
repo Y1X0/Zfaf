@@ -2,9 +2,9 @@ import { notFound } from 'next/navigation';
 
 import { tenantScopeFor } from '@zfaf/core';
 
-import { container } from '../../../server/container.js';
-import { requireActor } from '../../../server/request-context.js';
-import { IslandMessages } from '../../../i18n/island.js';
+import { container } from '../../../../../server/container.js';
+import { requireActor } from '../../../../../server/request-context.js';
+import { IslandMessages } from '../../../../../i18n/island.js';
 import { PreviewFrame } from './PreviewFrame.js';
 
 /**

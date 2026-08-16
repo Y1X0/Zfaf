@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
-import { DEFAULT_LOCALE, LOCALE_DIRECTION } from '../i18n/routing.js';
+import { getLocale } from 'next-intl/server';
+
+import { DEFAULT_LOCALE, LOCALE_DIRECTION, type Locale, isLocale } from '../i18n/routing.js';
 import './site.css';
 
 export const metadata: Metadata = {
@@ -41,8 +43,16 @@ export const viewport: Viewport = {
  * a connection where the first paint is already the whole budget. `preload`
  * starts the download during head parsing instead (D9.3).
  */
-export default function RootLayout({ children }: { children: ReactNode }) {
-  const locale = DEFAULT_LOCALE;
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  /**
+   * The locale is resolved from the request rather than from a route param,
+   * because only a root layout may render `<html>` and a root layout has no
+   * `[locale]` segment above it. This also gives the surfaces *outside*
+   * `[locale]` — the admin console, the prerendered not-found page — a
+   * correct document to sit in.
+   */
+  const resolved = await getLocale();
+  const locale: Locale = isLocale(resolved) ? resolved : DEFAULT_LOCALE;
 
   return (
     <html lang={locale} dir={LOCALE_DIRECTION[locale]}>
