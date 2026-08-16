@@ -13,6 +13,10 @@
   "dependencies": {
     "@zfaf/config": "workspace:*",
     "@zfaf/core": "workspace:*",
+    "@zfaf/db": "workspace:*",
+    "@zfaf/infra": "workspace:*",
+    "@zfaf/invitation-renderer": "workspace:*",
+    "@zfaf/media-client": "workspace:*",
     "@zfaf/shared": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",

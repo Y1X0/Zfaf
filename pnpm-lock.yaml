@@ -53,6 +53,18 @@ importers:
       '@zfaf/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@zfaf/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@zfaf/infra':
+        specifier: workspace:*
+        version: link:../../packages/infra
+      '@zfaf/invitation-renderer':
+        specifier: workspace:*
+        version: link:../../packages/invitation-renderer
+      '@zfaf/media-client':
+        specifier: workspace:*
+        version: link:../../packages/media-client
       '@zfaf/shared':
         specifier: workspace:*
         version: link:../../packages/shared

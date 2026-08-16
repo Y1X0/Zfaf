@@ -4,7 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./storage": "./src/storage/index.ts",
+    "./crypto": "./src/crypto/index.ts",
+    "./crypto/tokens": "./src/crypto/node-token-generator.ts",
+    "./crypto/password": "./src/crypto/argon2-password-hasher.ts",
+    "./rate-limit": "./src/rate-limit/index.ts",
+    "./mail": "./src/mail/index.ts"
   },
   "scripts": {
     "lint": "eslint .",
