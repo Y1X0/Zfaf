@@ -22,6 +22,7 @@ export * from './invitation/ports/invitation-repository.js';
 export * from './template/domain/theme.js';
 export * from './template/domain/section.js';
 export * from './template/domain/template-manifest.js';
+export * from './template/domain/manifest-migrations.js';
 
 // ── billing (ADR-0008, ADR-0014) ────────────────────────────────────────────
 export * from './billing/domain/money.js';

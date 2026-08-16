@@ -49,6 +49,12 @@ jobs:
       - name: Module boundaries
         run: pnpm boundaries
 
+      # A manifest naming a variant the registry does not have would render as
+      # a fallback rather than as designed. Catching it here means a template
+      # cannot be merged in that state (ADR-0004).
+      - name: Validate shipped template manifests
+        run: pnpm template:validate
+
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest

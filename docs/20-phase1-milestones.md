@@ -17,7 +17,7 @@
 | **M0** | Foundation & Toolchain | 2.0 | كل شيء | ✅ |
 | **M1** | Data Layer & Domain Core | 2.0 | M2–M9 | ✅ |
 | **M2** | Identity & Authorization | 2.0 | M5, M6, M8 | 🟡 |
-| **M3** | **Template Engine + Renderer** ⭐ | 3.5 | M5, M6 | ⬜ |
+| **M3** | **Template Engine + Renderer** ⭐ | 3.5 | M5, M6 | 🟡 |
 | **M4** | Media Pipeline | 1.5 | M5 | ⬜ |
 | **M5** | Invitation Builder | 3.0 | M6 | ⬜ |
 | **M6** | Publish & Public Page | 2.0 | M7 | ⬜ |
@@ -321,6 +321,54 @@ THEN توقف فوراً
 
 **ما لا يُعدّ hack (مقبول ومتوقع):** إضافة **variant جديد** للسجل — لأنه قدرة عامة
 تُتاح لكل القوالب. هذا هو التوسع المصمَّم له.
+
+### ✅ نتيجة التنفيذ — 2026-08-16
+
+**🚦 بوابة التوقف: عُبِرَت.** القالب الثالث (Minimal White) رُكِّب من `manifest.json` وثيم فقط.
+لا فرع باسم قالب، ولا معرّف قالب مكتوب في الكود، ولا تجاوز لعقد `SectionRenderProps`.
+هذا **مُثبَت بالمصدر لا بالادعاء**: `src/render/architecture.test.ts` يقرأ كل ملفات
+`src/` غير الاختبارية ويؤكد أن أياً من `classic-luxury` / `royal-gold` / `minimal-white`
+لا يظهر في أي منها، وأن لا وجود لـ `templateKey ===` أو `sectionId ===`.
+
+| # | المخرج | الحالة | الدليل |
+|---|--------|:------:|--------|
+| D3.1 | مخطط Manifest + إصدار + تنقية | ✅ | `core/template/domain/template-manifest.ts` — `.strict()` + رفض مفاتيح تلويث الـ prototype + حدّ حجم |
+| D3.2 | `SectionRegistry` + عقد المكوّنات | ✅ | 27 variant · رفض التكرار · فرض التسمية `type.` |
+| D3.3 | `resolveTheme()` + حارس التباين + CSS vars | ✅ | `theme/resolve-theme.ts` + `theme/to-css-variables.ts` |
+| D3.4 | `InvitationRenderer` خالص وحتمي | ✅ | 100 تكرار ⇒ HTML متطابق بايت ببايت، لكل قالب |
+| D3.5 | 11 نوع قسم × variant واحد على الأقل | ✅ | **27 variant** موزّعة على 11 نوعاً |
+| D3.6 | Classic Luxury | ✅ | `templates/classic-luxury/manifest.json` |
+| D3.7 | Royal Gold | ✅ | `templates/royal-gold/manifest.json` |
+| D3.8 | **Minimal White** (اختبار الصحة) | ✅ | صفر تداخل في الـ variants مع Classic Luxury |
+| D3.9 | `pnpm template:validate` | ✅ | مربوط في CI ضمن مرحلة `static` |
+| D3.10 | إطار ترحيل الـ manifest | ✅ | `core/template/domain/manifest-migrations.ts` — السجل فارغ عمداً (لا يوجد إلا الإصدار 1) |
+
+**الاختبارات: 180 اختباراً في حزمة الـ renderer** (30 سلوك · 63 أمان · 15 سجل · 27 تحقق manifest ·
+13 معماري · 32 من `it.each`)، إضافة إلى 20 اختباراً لإطار الترحيل في `core`.
+**الإجمالي بعد M3: 621 وحدة + 74 تكامل، جميعها خضراء.**
+
+#### 🔴 عيب حقيقي اكتُشف وأُصلح داخل M3
+
+**فشل ضمان fail-soft على الخادم.** كان كل قسم ملفوفاً بـ `SectionBoundary`
+(React error boundary). عند كتابة اختبار «قسم يرمي استثناءً لا يُسقط الصفحة» تبيّن أن
+React **لا يستدعي error boundary أثناء server rendering** ما لم تكن الشجرة الفاشلة داخل
+`<Suspense>` — أي أن استثناءً في قسم واحد كان **سيُسقط صفحة الدعوة بالكامل** على الخادم،
+وهو بالضبط السيناريو الذي وُجد الـ boundary لمنعه.
+
+الإصلاح: كل قسم صار ملفوفاً بـ `<Suspense fallback={null}>` حول الـ boundary، مع تعليق
+يوضح أن الـ Suspense **حامل للحِمل لا زينة**. مُثبت باختبار يرمي استثناءً فعلياً ويؤكد
+أن بقية الصفحة تُعرَض.
+
+#### 🟡 ما لم يُنفَّذ في M3 — وسببه
+
+| البند | السبب | متى |
+|-------|-------|-----|
+| **بصرية: 18 لقطة** (3 قوالب × 3 أجهزة × لغتان) | تحتاج Playwright + متصفح فعلي؛ لا توجد بعد طبقة HTTP تعرض القوالب | M6 (مع الصفحة العامة) |
+| **a11y: `axe-core` على كل قالب** | نفس السبب — `axe-core` يحتاج DOM حقيقياً لا سلسلة HTML | M6 |
+| **قاعدة ESLint تمنع `Date.now`/`Math.random` في مسار العرض** | نُفِّذ كـ **اختبار مصدر** في `architecture.test.ts` بدل قاعدة ESLint جديدة؛ يفحص الحزمة كاملة بما فيها القوالب النصية التي لا تراها قاعدة JSX | — (مُغطّى) |
+
+> هذان البندان **لا يحجبان M4 ولا M5**: كلاهما اختبار تحقّق لا قدرة منتج، وكلاهما يحتاج
+> بيئة متصفح لا تُنشأ إلا في M6.
 
 ---
 
@@ -771,7 +819,7 @@ M0 Foundation
 | M0 | Foundation | 2.0 | ✅ | ✅¹ |
 | M1 | Data & Domain | 2.0 | ✅ | ✅² |
 | M2 | Identity | 2.0 | 🟡 | 🟡³ |
-| M3 | Template Engine ⭐ | 3.5 | ⬜ | ⬜ 🚦 |
+| M3 | Template Engine ⭐ | 3.5 | 🟡 | ✅ 🚦⁴ |
 | M4 | Media | 1.5 | ⬜ | ⬜ |
 | M5 | Builder | 3.0 | ⬜ | ⬜ |
 | M6 | Publish & Public | 2.0 | ⬜ | ⬜ |
@@ -779,6 +827,11 @@ M0 Foundation
 | M8 | Analytics + Admin | 1.0 | ⬜ | ⬜ |
 | M9 | i18n & Polish | 1.5 | ⬜ | ⬜ |
 | M10 | Production Ready | 1.5 | ⬜ | ⬜ |
+
+⁴ **M3: بوابة التوقف عُبِرَت، مع بندي تحقّق مؤجَّلين.** القالب الثالث بُني بـ manifest
+وثيم فقط — لا Renderer hack ولا فرع خاص بقالب، مُثبَتاً بفحص المصدر لا بالادعاء.
+المؤجَّل: **اللقطات البصرية الـ18** و**`axe-core`**، وكلاهما يحتاج متصفحاً حقيقياً
+لا يوجد قبل الصفحة العامة في M6. **لا يحجبان M4 ولا M5.**
 
 ³ **M2 مكتمل جوهرياً مع بندين مفتوحين:**
 `D2.5` (Google OAuth) محجوب على [ADR-0018](adr/0018-first-party-authentication.md) — تعارض

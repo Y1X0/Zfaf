@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "key": "minimal-white",
+  "version": 1,
+  "meta": {
+    "name": { "ar": "الأبيض البسيط", "en": "Minimal White" },
+    "description": {
+      "ar": "دعوة طباعية خالصة بلا صور ولا زخارف ولا حركة — تصلح لمن لا يرغب بنشر صور شخصية.",
+      "en": "A purely typographic invitation: no photographs, no ornament, no motion — for families who prefer not to publish personal images."
+    },
+    "category": "minimal",
+    "author": "Zfaf",
+    "previewImage": "preview-minimal-white",
+    "requiredPlanLevel": 0,
+    "supportedLocales": ["ar", "en"]
+  },
+  "theme": {
+    "colors": {
+      "primary": "#111111",
+      "secondary": "#111111",
+      "accent": "#dddddd",
+      "background": "#ffffff",
+      "surface": "#fafafa",
+      "textPrimary": "#111111",
+      "textSecondary": "#666666",
+      "overlay": "rgba(255, 255, 255, 0.9)"
+    },
+    "typography": {
+      "displayFont": "reem-kufi",
+      "bodyFont": "ibm-plex-arabic",
+      "scale": "compact",
+      "displayWeight": 300
+    },
+    "spacing": "airy",
+    "radius": "sharp",
+    "buttons": "ghost",
+    "dividers": "none",
+    "background": { "kind": "solid", "value": "white", "overlayOpacity": 0 },
+    "motion": { "intensity": "none", "effects": [] },
+    "numerals": "latin"
+  },
+  "customizable": {
+    "colors": ["primary"],
+    "fonts": true,
+    "fontOptions": ["reem-kufi", "ibm-plex-arabic", "inter"],
+    "spacing": true,
+    "motion": false,
+    "sectionOrder": true
+  },
+  "sections": [
+    {
+      "id": "hero",
+      "type": "hero",
+      "variant": "hero.typographic",
+      "enabled": true,
+      "required": true,
+      "order": 1,
+      "props": { "showDate": true, "useShortName": false, "eyebrow": "" }
+    },
+    {
+      "id": "couple",
+      "type": "couple",
+      "variant": "couple.namesOnly",
+      "enabled": true,
+      "required": false,
+      "order": 2,
+      "props": { "heading": "", "showMessage": true }
+    },
+    {
+      "id": "events",
+      "type": "events",
+      "variant": "events.simpleList",
+      "enabled": true,
+      "required": false,
+      "order": 3,
+      "props": { "heading": "Programme", "showDescriptions": false, "showVenue": true }
+    },
+    {
+      "id": "location",
+      "type": "location",
+      "variant": "location.textWithButton",
+      "enabled": true,
+      "required": false,
+      "order": 4,
+      "props": { "heading": "", "buttonLabel": "" }
+    },
+    {
+      "id": "countdown",
+      "type": "countdown",
+      "variant": "countdown.minimalDigits",
+      "enabled": true,
+      "required": false,
+      "order": 5,
+      "props": { "heading": "", "showSeconds": false }
+    },
+    {
+      "id": "rsvp",
+      "type": "rsvp",
+      "variant": "rsvp.compactForm",
+      "enabled": true,
+      "required": false,
+      "order": 6,
+      "props": { "heading": "RSVP", "prompt": "", "showNote": false }
+    },
+    {
+      "id": "gallery",
+      "type": "gallery",
+      "variant": "gallery.grid",
+      "enabled": false,
+      "required": false,
+      "order": 7,
+      "props": { "heading": "", "maxImages": 12 }
+    },
+    {
+      "id": "footer",
+      "type": "footer",
+      "variant": "footer.minimal",
+      "enabled": true,
+      "required": true,
+      "order": 8,
+      "props": { "closingLine": "", "showBranding": true }
+    }
+  ],
+  "assets": { "ornaments": [], "patterns": [], "fontSubsets": ["arabic-basic", "latin-basic"] }
+}

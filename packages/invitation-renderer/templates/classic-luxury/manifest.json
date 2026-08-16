@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "key": "classic-luxury",
+  "version": 1,
+  "meta": {
+    "name": { "ar": "الفخامة الكلاسيكية", "en": "Classic Luxury" },
+    "description": {
+      "ar": "دعوة فاتحة أنيقة بزخارف كلاسيكية وخط عربي منسوخ.",
+      "en": "A light, elegant invitation with classic ornament and calligraphic display type."
+    },
+    "category": "classic",
+    "author": "Zfaf",
+    "previewImage": "preview-classic-luxury",
+    "requiredPlanLevel": 0,
+    "supportedLocales": ["ar", "en"]
+  },
+  "theme": {
+    "colors": {
+      "primary": "#8a6d24",
+      "secondary": "#2f2a24",
+      "accent": "#d9c89a",
+      "background": "#fffdf8",
+      "surface": "#f7f2e7",
+      "textPrimary": "#241f1a",
+      "textSecondary": "#5c5348",
+      "overlay": "rgba(36, 31, 26, 0.35)"
+    },
+    "typography": {
+      "displayFont": "aref-ruqaa",
+      "bodyFont": "ibm-plex-arabic",
+      "scale": "normal",
+      "displayWeight": 400
+    },
+    "spacing": "normal",
+    "radius": "soft",
+    "buttons": "solid",
+    "dividers": "ornament",
+    "background": { "kind": "solid", "value": "ivory", "overlayOpacity": 0 },
+    "motion": { "intensity": "subtle", "effects": ["float"] },
+    "numerals": "latin"
+  },
+  "customizable": {
+    "colors": ["primary", "accent", "background"],
+    "fonts": true,
+    "fontOptions": ["aref-ruqaa", "amiri", "cormorant-garamond"],
+    "spacing": false,
+    "motion": true,
+    "sectionOrder": true
+  },
+  "sections": [
+    {
+      "id": "hero",
+      "type": "hero",
+      "variant": "hero.centeredArch",
+      "enabled": true,
+      "required": true,
+      "order": 1,
+      "props": { "showDate": true, "useShortName": false, "eyebrow": "بكل الحب ندعوكم" }
+    },
+    {
+      "id": "couple",
+      "type": "couple",
+      "variant": "couple.portraitPair",
+      "enabled": true,
+      "required": false,
+      "order": 2,
+      "props": { "heading": "العروسان", "showMessage": true }
+    },
+    {
+      "id": "countdown",
+      "type": "countdown",
+      "variant": "countdown.ornateBoxes",
+      "enabled": true,
+      "required": false,
+      "order": 3,
+      "props": { "heading": "باقٍ على الحفل", "showSeconds": true }
+    },
+    {
+      "id": "events",
+      "type": "events",
+      "variant": "events.timeline",
+      "enabled": true,
+      "required": false,
+      "order": 4,
+      "props": { "heading": "برنامج الحفل", "showDescriptions": true, "showVenue": true }
+    },
+    {
+      "id": "location",
+      "type": "location",
+      "variant": "location.mapCard",
+      "enabled": true,
+      "required": false,
+      "order": 5,
+      "props": { "heading": "المكان", "buttonLabel": "" }
+    },
+    {
+      "id": "gallery",
+      "type": "gallery",
+      "variant": "gallery.masonry",
+      "enabled": true,
+      "required": false,
+      "order": 6,
+      "props": { "heading": "من ذكرياتنا", "maxImages": 24 }
+    },
+    {
+      "id": "message",
+      "type": "message",
+      "variant": "message.centeredQuote",
+      "enabled": true,
+      "required": false,
+      "order": 7,
+      "props": { "heading": "", "body": "", "attribution": "" }
+    },
+    {
+      "id": "rsvp",
+      "type": "rsvp",
+      "variant": "rsvp.elegantForm",
+      "enabled": true,
+      "required": false,
+      "order": 8,
+      "props": { "heading": "هل ستشاركوننا فرحتنا؟", "prompt": "نتشرف بحضوركم", "showNote": true }
+    },
+    {
+      "id": "music",
+      "type": "music",
+      "variant": "music.floatingButton",
+      "enabled": true,
+      "required": false,
+      "order": 9,
+      "props": { "label": "", "showAttribution": true }
+    },
+    {
+      "id": "footer",
+      "type": "footer",
+      "variant": "footer.ornament",
+      "enabled": true,
+      "required": true,
+      "order": 10,
+      "props": { "closingLine": "بانتظاركم", "showBranding": true }
+    }
+  ],
+  "assets": {
+    "ornaments": ["gold-corner", "gold-divider"],
+    "patterns": [],
+    "fontSubsets": ["arabic-basic", "latin-basic"]
+  }
+}

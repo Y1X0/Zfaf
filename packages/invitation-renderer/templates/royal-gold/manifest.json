@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "key": "royal-gold",
+  "version": 1,
+  "meta": {
+    "name": { "ar": "الملكي الذهبي", "en": "Royal Gold" },
+    "description": {
+      "ar": "دعوة داكنة فخمة بختم شمعي ذهبي وحركة أغنى.",
+      "en": "A dark, opulent invitation opening on a gold wax seal, with richer motion."
+    },
+    "category": "classic",
+    "author": "Zfaf",
+    "previewImage": "preview-royal-gold",
+    "requiredPlanLevel": 1,
+    "supportedLocales": ["ar", "en"]
+  },
+  "theme": {
+    "colors": {
+      "primary": "#c9a227",
+      "secondary": "#0e0e0e",
+      "accent": "#e8d9a0",
+      "background": "#0e0e0e",
+      "surface": "#191919",
+      "textPrimary": "#f5f0e1",
+      "textSecondary": "#bfb48f",
+      "overlay": "rgba(0, 0, 0, 0.6)"
+    },
+    "typography": {
+      "displayFont": "amiri",
+      "bodyFont": "tajawal",
+      "scale": "generous",
+      "displayWeight": 700
+    },
+    "spacing": "airy",
+    "radius": "sharp",
+    "buttons": "outline",
+    "dividers": "geometric",
+    "background": { "kind": "pattern", "value": "islamic-geo-01", "overlayOpacity": 0.85 },
+    "motion": { "intensity": "rich", "effects": ["sparkle", "waxSeal"] },
+    "numerals": "latin"
+  },
+  "customizable": {
+    "colors": ["primary", "accent"],
+    "fonts": true,
+    "fontOptions": ["amiri", "aref-ruqaa", "reem-kufi"],
+    "spacing": false,
+    "motion": true,
+    "sectionOrder": true
+  },
+  "sections": [
+    {
+      "id": "hero",
+      "type": "hero",
+      "variant": "hero.waxSeal",
+      "enabled": true,
+      "required": true,
+      "order": 1,
+      "props": { "showDate": true, "useShortName": true, "eyebrow": "" }
+    },
+    {
+      "id": "message",
+      "type": "message",
+      "variant": "message.letterCard",
+      "enabled": true,
+      "required": false,
+      "order": 2,
+      "props": { "heading": "", "body": "", "attribution": "" }
+    },
+    {
+      "id": "couple",
+      "type": "couple",
+      "variant": "couple.portraitPair",
+      "enabled": true,
+      "required": false,
+      "order": 3,
+      "props": { "heading": "", "showMessage": false }
+    },
+    {
+      "id": "countdown",
+      "type": "countdown",
+      "variant": "countdown.circularRings",
+      "enabled": true,
+      "required": false,
+      "order": 4,
+      "props": { "heading": "العد التنازلي", "showSeconds": true }
+    },
+    {
+      "id": "events",
+      "type": "events",
+      "variant": "events.cards",
+      "enabled": true,
+      "required": false,
+      "order": 5,
+      "props": { "heading": "البرنامج", "showDescriptions": true, "showVenue": true }
+    },
+    {
+      "id": "location",
+      "type": "location",
+      "variant": "location.mapCard",
+      "enabled": true,
+      "required": false,
+      "order": 6,
+      "props": { "heading": "القاعة", "buttonLabel": "" }
+    },
+    {
+      "id": "gallery",
+      "type": "gallery",
+      "variant": "gallery.carousel",
+      "enabled": true,
+      "required": false,
+      "order": 7,
+      "props": { "heading": "معرض الصور", "maxImages": 20 }
+    },
+    {
+      "id": "rsvp",
+      "type": "rsvp",
+      "variant": "rsvp.elegantForm",
+      "enabled": true,
+      "required": false,
+      "order": 8,
+      "props": { "heading": "تأكيد الحضور", "prompt": "", "showNote": true }
+    },
+    {
+      "id": "music",
+      "type": "music",
+      "variant": "music.floatingButton",
+      "enabled": true,
+      "required": false,
+      "order": 9,
+      "props": { "label": "", "showAttribution": true }
+    },
+    {
+      "id": "footer",
+      "type": "footer",
+      "variant": "footer.ornament",
+      "enabled": true,
+      "required": true,
+      "order": 10,
+      "props": { "closingLine": "", "showBranding": true }
+    }
+  ],
+  "assets": {
+    "ornaments": ["gold-seal", "gold-corner"],
+    "patterns": ["islamic-geo-01"],
+    "fontSubsets": ["arabic-basic", "latin-basic"]
+  }
+}
