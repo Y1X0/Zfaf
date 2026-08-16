@@ -113,8 +113,30 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # A real S3 API, so the storage contract suite runs against something
+      # that signs and rejects for real rather than only against the in-memory
+      # adapter (ADR-0007 amendment).
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: zfafci
+          MINIO_ROOT_PASSWORD: zfafcisecret
+          MINIO_DEFAULT_BUCKETS: zfaf-media
+        ports: ['9000:9000']
+        options: >-
+          --health-cmd "mc ready local || curl -f http://127.0.0.1:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       DATABASE_URL: postgresql://zfaf:zfaf_ci@127.0.0.1:5432/zfaf?schema=public
+      S3_TEST_DRIVER: minio
+      S3_TEST_ENDPOINT: http://127.0.0.1:9000
+      S3_TEST_BUCKET: zfaf-media
+      S3_TEST_ACCESS_KEY_ID: zfafci
+      S3_TEST_SECRET_ACCESS_KEY: zfafcisecret
+      S3_TEST_REGION: us-east-1
+      S3_TEST_PATH_STYLE: 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -140,6 +162,12 @@ jobs:
 
       - name: Integration tests
         run: pnpm test:integration
+
+      # The same contract suite the unit job runs against the in-memory
+      # adapter, now against a live S3 API. A behaviour that holds for only one
+      # implementation shows up here.
+      - name: Storage contract tests against a live S3 API
+        run: pnpm exec vitest run packages/infra/src/storage
 
   # Proves the architectural guardrails actually fail the build. A rule that is
   # configured but not verified is a rule nobody knows is broken.

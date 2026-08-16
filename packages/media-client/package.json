@@ -1,5 +1,5 @@
 {
-  "name": "@zfaf/infra",
+  "name": "@zfaf/media-client",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,13 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.1111.0",
-    "@aws-sdk/s3-request-presigner": "^3.1111.0",
-    "@node-rs/argon2": "^2.0.0",
-    "@zfaf/core": "workspace:*",
-    "@zfaf/shared": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"

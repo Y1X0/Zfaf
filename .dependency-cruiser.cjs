@@ -42,6 +42,37 @@ module.exports = {
       to: { path: '^apps/(?!$1)([^/]+)/' },
     },
     {
+      name: 'storage-sdk-stays-in-its-adapter',
+      severity: 'error',
+      comment:
+        'ADR-0007 (amendment): the AWS/S3 SDK may only be imported by packages/infra/src/storage. Everything else goes through the StorageProvider port, so changing provider stays a one-directory change.',
+      from: { pathNot: '^packages/infra/src/storage/' },
+      // Matched anywhere in the resolved path, not anchored to
+      // `node_modules/`. A package that does not declare the dependency leaves
+      // it unresolved and reports the bare specifier, while one that does
+      // resolves into pnpm's virtual store
+      // (`node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>/…`). Anchoring
+      // matched neither, so the rule silently never fired — which the
+      // guardrail script caught.
+      to: { path: '(^|/)@aws-sdk/' },
+    },
+    {
+      name: 'image-library-stays-in-the-worker',
+      severity: 'error',
+      comment:
+        'Sharp is a native dependency and belongs to the processing adapter. packages/core declares the ImageProcessor port; nothing else decodes images.',
+      from: { pathNot: '^apps/worker/src/media/' },
+      to: { path: '(^|/)sharp(/|$)' },
+    },
+    {
+      name: 'heic-decoder-stays-in-its-module',
+      severity: 'error',
+      comment:
+        'ADR-0019: libheif-js is imported only by the HEIC decoding adapter. Everything else receives raw pixels or an encoded image through the ImageProcessor port.',
+      from: { pathNot: '^apps/worker/src/media/heic-decoder\\.ts$' },
+      to: { path: '(^|/)libheif-js(/|$)' },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       comment: 'Circular dependencies make modules impossible to reason about or extract.',
@@ -63,6 +94,10 @@ module.exports = {
           // Next.js discovers these by file-system convention, so nothing
           // imports them explicitly. They are entry points, not leftovers.
           '^apps/[^/]+/(next|vitest|playwright)\\.config\\.[cm]?[jt]s$',
+          // Test-support modules: imported only by test files, which are
+          // excluded from the graph, so they always look unreferenced.
+          '(^|/)[a-z0-9-]+-fixture\\.tsx?$',
+          '(^|/)src/testing/',
           'apps/[^/]+/src/app/.*/(page|layout|route|error|loading|not-found|template|opengraph-image)\\.tsx?$',
           'apps/[^/]+/src/app/(page|layout)\\.tsx?$',
         ],
@@ -73,7 +108,13 @@ module.exports = {
 
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '(\\.(test|spec)\\.[cm]?[jt]sx?$|/tests?/|/dist/|/\\.next/)' },
+    // Anchored to our own workspaces on purpose. An unanchored `/dist/` also
+    // matches third-party packages that ship from `dist/` — Sharp among them —
+    // which silently removed them from the graph and made every rule about
+    // them pass vacuously. The guardrail script is what surfaced this.
+    exclude: {
+      path: '(\\.(test|spec)\\.[cm]?[jt]sx?$|^(packages|apps)/[^/]+/(tests?|dist)/|/\\.next/)',
+    },
     tsConfig: { fileName: 'tsconfig.base.json' },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {

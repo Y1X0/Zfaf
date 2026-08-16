@@ -472,6 +472,11 @@ model MediaAsset {
   mimeType  String @map("mime_type")
   sizeBytes BigInt @map("size_bytes")
 
+  // The ceiling bound into the upload signature, kept so completion can check
+  // the object against the limit that applied when the URL was issued — a plan
+  // downgrade mid-upload must not retroactively quarantine a valid file.
+  signedMaxBytes BigInt @map("signed_max_bytes")
+
   width      Int?
   height     Int?
   durationMs Int? @map("duration_ms")

@@ -32,6 +32,15 @@ export * from './billing/ports/payment-provider.js';
 
 // ── media (ADR-0007) ────────────────────────────────────────────────────────
 export * from './media/ports/storage-provider.js';
+export * from './media/ports/image-processor.js';
+export * from './media/ports/media-repository.js';
+export * from './media/domain/image-format.js';
+export * from './media/domain/original-filename.js';
+export * from './media/domain/upload-policy.js';
+export * from './media/domain/media-status.js';
+export * from './media/domain/media-deletion.js';
+export * from './media/usecases/upload-media.js';
+export * from './media/usecases/manage-media.js';
 
 // ── identity (ADR-0006, ADR-0018) ───────────────────────────────────────────
 export * from './identity/domain/email.js';

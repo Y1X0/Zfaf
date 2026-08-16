@@ -32,6 +32,8 @@ export const LIMIT_KEYS = [
   'invitation.active',
   'media.gallery_images',
   'media.storage_mb',
+  /** Per-file ceiling. Separate from the quota: one is a photo, one is a library. */
+  'media.image_size_mb',
   'invitation.active_days_after_event',
   'team.member_count',
 ] as const;

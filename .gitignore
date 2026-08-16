@@ -25,3 +25,7 @@ pnpm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Fetched on demand by `pnpm --filter @zfaf/worker fixtures:heic`; not vendored
+# because we will not commit a third-party photograph of unclear licence.
+apps/worker/src/media/__fixtures__/

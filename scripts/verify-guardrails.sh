@@ -34,6 +34,34 @@ write_violation() {
   CREATED_FILES+=("$path")
 }
 
+# expect_boundary_rejected <label> <file> <expected-rule-name>
+#
+# The dependency-cruiser rules are checked the same way as the ESLint ones and
+# for the same reason: a boundary that is configured but never exercised is a
+# boundary nobody notices has broken. These three keep a native or
+# vendor-specific dependency inside the one adapter that owns it.
+expect_boundary_rejected() {
+  local label="$1"
+  local file="$2"
+  local expected="$3"
+  local output
+
+  if ! output="$(pnpm exec depcruise --config .dependency-cruiser.cjs "$file" 2>&1)"; then
+    if printf '%s' "$output" | grep -q "$expected"; then
+      echo "  ✓ $label"
+      return
+    fi
+    echo "  ✗ $label — rejected, but not by \"$expected\""
+    printf '%s\n' "$output" | head -5
+    failures=$((failures + 1))
+    return
+  fi
+
+  echo "  ✗ $label — dependency-cruiser ACCEPTED a file it must reject"
+  echo "      file: $file"
+  failures=$((failures + 1))
+}
+
 # expect_rejected <label> <file> <expected-rule-substring>
 expect_rejected() {
   local label="$1"
@@ -127,6 +155,40 @@ export const allowed = user.plan === "premium";'
 expect_rejected "Branching on a plan name is rejected" \
   "apps/web/src/__guardrail_plan.ts" \
   "no-restricted-syntax"
+
+# ── ADR-0007 amendment: the storage SDK stays in its adapter ────────────────
+write_violation "packages/core/src/__guardrail_s3.ts" \
+  'import { S3Client } from "@aws-sdk/client-s3";
+export const client = S3Client;'
+expect_boundary_rejected "AWS SDK outside packages/infra/src/storage is rejected" \
+  "packages/core/src/__guardrail_s3.ts" \
+  "storage-sdk-stays-in-its-adapter"
+
+# ── the image library belongs to the processing adapter ─────────────────────
+write_violation "packages/core/src/__guardrail_sharp.ts" \
+  'import sharp from "sharp";
+export const resize = sharp;'
+expect_boundary_rejected "Sharp outside apps/worker/src/media is rejected" \
+  "packages/core/src/__guardrail_sharp.ts" \
+  "image-library-stays-in-the-worker"
+
+# The same rule from inside the package that *declares* Sharp, so the pnpm
+# virtual-store resolution path is exercised rather than only the
+# bare-specifier one.
+write_violation "apps/worker/src/__guardrail_sharp_resolved.ts" \
+  'import sharp from "sharp";
+export const resize = sharp;'
+expect_boundary_rejected "Sharp elsewhere in the worker is rejected" \
+  "apps/worker/src/__guardrail_sharp_resolved.ts" \
+  "image-library-stays-in-the-worker"
+
+# ── ADR-0019: the HEIC decoder is imported in exactly one module ────────────
+write_violation "apps/worker/src/__guardrail_heif.ts" \
+  'import { HeifDecoder } from "libheif-js";
+export const decoder = HeifDecoder;'
+expect_boundary_rejected "libheif-js outside its own module is rejected" \
+  "apps/worker/src/__guardrail_heif.ts" \
+  "heic-decoder-stays-in-its-module"
 
 echo
 if [ "$failures" -gt 0 ]; then

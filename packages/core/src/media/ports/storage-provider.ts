@@ -46,6 +46,23 @@ export interface StorageProvider {
   /** Source of truth for size and type after an upload completes. */
   head(key: StorageKey): Promise<ObjectMetadata | null>;
 
+  /**
+   * Reads an object server-side.
+   *
+   * Used by the worker to fetch an original for processing, and by nothing on
+   * the request path — a web request that streams bytes through our servers is
+   * the thing the signed-URL design exists to avoid.
+   */
+  getObject(key: StorageKey): Promise<Uint8Array | null>;
+
+  /**
+   * Writes an object server-side.
+   *
+   * Only derivatives arrive this way. Originals are always uploaded directly
+   * by the client against a signed URL.
+   */
+  putObject(key: StorageKey, bytes: Uint8Array, contentType: string): Promise<void>;
+
   delete(key: StorageKey): Promise<void>;
 
   /** Bulk removal for account and invitation deletion. Returns the count. */
