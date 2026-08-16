@@ -227,6 +227,7 @@ export async function cleanupSeeded(): Promise<void> {
 
     await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.slugHistory.deleteMany({ where: { invitation: { ownerId: { in: userIds } } } });
+    await prisma.rsvp.deleteMany({ where: { invitation: { ownerId: { in: userIds } } } });
     await prisma.invitationMember.deleteMany({ where: { userId: { in: userIds } } });
     // The pointer has to be cleared before the versions it points at can go —
     // and the status with it, because a check constraint (rightly) refuses a
@@ -283,6 +284,15 @@ function filledDraft(timezone: string): Record<string, unknown> {
     variant: 'countdown.ornateBoxes',
     enabled: true,
     order: 1,
+    props: {},
+  });
+  // The RSVP form, which is the whole of M7's public surface.
+  sections.splice(2, 0, {
+    id: 'rsvp',
+    type: 'rsvp',
+    variant: 'rsvp.elegantForm',
+    enabled: true,
+    order: 2,
     props: {},
   });
 
@@ -371,4 +381,55 @@ export async function retireSlug(invitationId: string, oldSlug: string): Promise
   await prisma.slugHistory.create({
     data: { id: randomUUID(), invitationId, oldSlug, changedAt: new Date() },
   });
+}
+
+/** How many replies an invitation has. Used to assert that nothing was written. */
+export async function countRsvps(invitationId: string): Promise<number> {
+  return prismaClient().rsvp.count({ where: { invitationId } });
+}
+
+/** The invitation's denormalised reply counters (M7). */
+export async function readCounters(
+  invitationId: string,
+): Promise<{ yes: number; no: number; guests: number }> {
+  const row = await prismaClient().invitation.findUniqueOrThrow({
+    where: { id: invitationId },
+    select: { rsvpYesCount: true, rsvpNoCount: true, rsvpGuestCount: true },
+  });
+  return { yes: row.rsvpYesCount, no: row.rsvpNoCount, guests: row.rsvpGuestCount };
+}
+
+/**
+ * A signed-in platform administrator.
+ *
+ * Used to prove the negative: staff reach the invitation and are still refused
+ * the guest list, because guest data is not staff-readable however senior the
+ * account (docs/09 §3.4).
+ */
+export async function seedStaffSession(): Promise<{ userId: string; sessionToken: string }> {
+  const prisma = prismaClient();
+  const userId = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: userId,
+      email: `staff-${randomUUID().slice(0, 8)}@${TEST_EMAIL_DOMAIN}`,
+      emailVerifiedAt: new Date(),
+      marketCode: 'SA',
+      role: 'admin',
+    },
+  });
+
+  const sessionToken = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+  await prisma.session.create({
+    data: {
+      id: randomUUID(),
+      userId,
+      tokenHash: createHash('sha256').update(sessionToken).digest(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      createdAt: new Date(),
+      lastUsedAt: new Date(),
+    },
+  });
+
+  return { userId, sessionToken };
 }

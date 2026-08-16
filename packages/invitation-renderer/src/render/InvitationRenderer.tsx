@@ -39,6 +39,10 @@ export interface RenderOptions {
   readonly registry?: SectionRegistry;
   /** Nonce for the inline style element, matching the page's CSP. */
   readonly styleNonce?: string;
+  /** Where the RSVP form posts. Absent in preview, where nothing submits. */
+  readonly formAction?: string | undefined;
+  /** The outcome of a form post the guest was redirected back from. */
+  readonly formStatus?: 'ok' | 'invalid' | 'closed' | 'rate' | 'check' | undefined;
 }
 
 export interface InvitationRendererProps extends RenderOptions {

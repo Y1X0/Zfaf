@@ -91,6 +91,7 @@ export async function GET(
   // ── the visible invitation ────────────────────────────────────────────────
 
   const policy = publicResponsePolicy(view.visibility);
+  const rsvpStatus = readRsvpStatus(request);
   const canonicalUrl = publicInvitationUrl(baseUrl(request), slug);
   const nonce = crypto.randomUUID().replaceAll('-', '');
   const serverNow = clock.now().toISOString();
@@ -114,6 +115,8 @@ export async function GET(
     serverNow,
     title: copy.title,
     description: copy.description,
+    rsvpAction: `${baseUrl(request)}/api/public/invitations/${encodeURIComponent(slug)}/rsvp`,
+    rsvpStatus,
   });
 
   // A section that throws is dropped and the rest of the invitation still
@@ -131,10 +134,22 @@ export async function GET(
     status: 200,
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'cache-control': policy.cacheControl,
+      /**
+       * A page carrying somebody's reply confirmation is never cached.
+       *
+       * `/i/{slug}` is a shared-cache document, and `?rsvp=ok` renders "thank
+       * you, your reply is recorded". Cached, the next guest to open the link
+       * would be told they had already replied — and the form they need would
+       * not be there. The variant is per-visitor by definition, so it is
+       * per-visitor in the header too.
+       */
+      'cache-control': rsvpStatus ? 'private, no-store' : policy.cacheControl,
       // Lets a CDN purge exactly this invitation on republish rather than
       // waiting out the TTL.
       'cache-tag': `invitation:${view.invitationId}`,
+      // The invitation's language follows the invitation, not the visitor, so
+      // this is here for intermediaries that vary regardless (docs/04 §4).
+      vary: 'Accept-Language',
       'content-security-policy': contentSecurityPolicy(nonce),
       'x-robots-tag': policy.robots,
       ...HARDENING_HEADERS,
@@ -229,6 +244,27 @@ const HARDENING_HEADERS: Record<string, string> = {
  * is attacker-controlled. The request is only a fallback for environments
  * where the variable is not set.
  */
+/**
+ * The outcome of a reply the guest was just redirected back from (M7).
+ *
+ * Read from the query string against a closed set rather than passed through:
+ * the value reaches the rendered document, and accepting an arbitrary string
+ * from a URL would let anyone craft a link that puts their own text on
+ * somebody else's invitation.
+ */
+function readRsvpStatus(
+  request: Request,
+): 'ok' | 'invalid' | 'closed' | 'rate' | 'check' | undefined {
+  const value = new URL(request.url).searchParams.get('rsvp');
+  return value === 'ok' ||
+    value === 'invalid' ||
+    value === 'closed' ||
+    value === 'rate' ||
+    value === 'check'
+    ? value
+    : undefined;
+}
+
 function baseUrl(request: Request): string {
   try {
     return getEnv().PUBLIC_BASE_URL;

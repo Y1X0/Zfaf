@@ -41,6 +41,16 @@ export interface InvitationDocumentInput {
   readonly serverNow: string;
   readonly title: string;
   readonly description: string;
+  /** Where the RSVP form posts (M7). */
+  readonly rsvpAction: string;
+  /**
+   * The outcome of a reply the guest was just redirected back from.
+   *
+   * Rendered on the server because the public page has no client framework to
+   * hold it (ADR-0020) — which is also why a guest with JavaScript disabled
+   * still learns whether their reply was recorded.
+   */
+  readonly rsvpStatus?: 'ok' | 'invalid' | 'closed' | 'rate' | 'check' | undefined;
 }
 
 export async function renderInvitationDocument(input: InvitationDocumentInput): Promise<{
@@ -50,7 +60,11 @@ export async function renderInvitationDocument(input: InvitationDocumentInput): 
   const { renderToStaticMarkup } = await import('react-dom/server');
   const { snapshot } = input;
 
-  const body = await renderInvitationHtml(snapshot, { styleNonce: input.nonce });
+  const body = await renderInvitationHtml(snapshot, {
+    styleNonce: input.nonce,
+    formAction: input.rsvpAction,
+    formStatus: input.rsvpStatus,
+  });
   const head = renderToStaticMarkup(<Head {...input} />);
   const share = renderToStaticMarkup(
     <ShareButton title={input.title} url={input.canonicalUrl} locale={snapshot.locale} />,
@@ -162,6 +176,16 @@ min-block-size:44px;min-inline-size:44px;padding:.7rem 1.1rem;border:0;border-ra
 background:var(--zf-color-primary,#333);color:var(--zf-color-bg,#fff);font:inherit;font-size:.95rem;
 cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.18)}
 .zf-share[data-copied]::after{content:' ✓'}
+.zf-rsvp__status:empty{display:none}
+.zf-rsvp__status{margin-block:0 1rem;padding:.75rem 1rem;border-radius:var(--zf-radius);
+background:var(--zf-color-surface);color:var(--zf-color-text);font-size:.95rem;line-height:1.7}
+.zf-rsvp__status[data-rsvp-status='ok']{border-inline-start:3px solid var(--zf-color-primary)}
+.zf-rsvp__form fieldset{border:0;padding:0;margin:0}
+/* A native radio renders about 13px across, which is not a tappable target.
+   Sizing the control itself — not only the label around it — is what keeps the
+   44px rule true for the thing a thumb actually has to hit. */
+.zf-rsvp__option input[type='radio']{inline-size:1.5rem;block-size:1.5rem;
+min-inline-size:44px;min-block-size:44px;accent-color:var(--zf-color-primary)}
 .zf-lightbox{border:0;padding:0;background:transparent;max-inline-size:96vw;max-block-size:96vh}
 .zf-lightbox::backdrop{background:rgba(0,0,0,.86)}
 .zf-lightbox__image{display:block;max-inline-size:96vw;max-block-size:90vh;object-fit:contain}

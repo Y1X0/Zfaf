@@ -224,6 +224,120 @@ function wireShare(root: Document): Cleanup {
   return () => button.removeEventListener('click', onClick);
 }
 
+// ── the RSVP form (M7) ──────────────────────────────────────────────────────
+
+/**
+ * Submits the reply without leaving the page.
+ *
+ * Strictly an enhancement. The form has a real `action` and a real `method`,
+ * so with this script absent the browser posts it and the server redirects
+ * back with the outcome rendered into the page. All this adds is not losing
+ * the guest's scroll position — which on a long invitation is most of the
+ * felt quality.
+ *
+ * The endpoint is the same one the browser would have posted to, and it
+ * answers JSON when asked to. Two code paths on the server would be two places
+ * for the rules to drift.
+ */
+function wireRsvp(root: Document): Cleanup {
+  const form = root.querySelector<HTMLFormElement>('[data-rsvp-form]');
+  if (!form || !form.action) return () => {};
+
+  const status = root.querySelector<HTMLElement>('[data-rsvp-status]');
+  const submit = form.querySelector<HTMLButtonElement>('[type="submit"]');
+  const arabic = root.documentElement.lang !== 'en';
+
+  const say = (message: string, state: string): void => {
+    if (!status) return;
+    status.textContent = message;
+    status.setAttribute('data-rsvp-status', state);
+  };
+
+  const onSubmit = (event: SubmitEvent): void => {
+    event.preventDefault();
+    if (submit) submit.disabled = true;
+    say(arabic ? 'جارٍ الإرسال…' : 'Sending…', 'pending');
+
+    void fetch(form.action, {
+      method: 'POST',
+      headers: { accept: 'application/json' },
+      body: new FormData(form),
+    })
+      .then(async (response) => {
+        const body = (await response.json().catch(() => null)) as {
+          data?: { editToken?: string };
+          error?: { code?: string };
+        } | null;
+
+        if (response.ok) {
+          /**
+           * The edit token is kept in this browser and nowhere else.
+           *
+           * It is what lets the guest correct their answer for a day without
+           * an account. `sessionStorage` rather than `localStorage`: it is a
+           * credential with a 24-hour life, and leaving it on a shared phone
+           * for months afterwards is a worse trade than losing the ability to
+           * edit after the tab closes.
+           */
+          if (body?.data?.editToken) {
+            try {
+              window.sessionStorage.setItem(`zf-rsvp:${form.action}`, body.data.editToken);
+            } catch {
+              // Private browsing refuses storage. Losing the ability to edit is
+              // a small loss; failing the reply over it would be a large one.
+            }
+          }
+          form.hidden = true;
+          say(
+            arabic ? 'شكراً لك! تم تسجيل ردّك.' : 'Thank you — your reply has been recorded.',
+            'ok',
+          );
+          return;
+        }
+
+        if (submit) submit.disabled = false;
+        say(messageFor(body?.error?.code ?? '', arabic), 'error');
+      })
+      .catch(() => {
+        // The connection failed, not the reply. Re-enabling the button and
+        // saying so is better than a silent dead end — and the form still has
+        // its native action, so a plain reload-and-submit also works.
+        if (submit) submit.disabled = false;
+        say(
+          arabic
+            ? 'تعذّر الإرسال. تحقّق من الاتصال وأعد المحاولة.'
+            : 'Could not send. Check your connection and try again.',
+          'error',
+        );
+      });
+  };
+
+  form.addEventListener('submit', onSubmit);
+  return () => form.removeEventListener('submit', onSubmit);
+}
+
+function messageFor(code: string, arabic: boolean): string {
+  switch (code) {
+    case 'RATE_LIMITED':
+      return arabic
+        ? 'وصلنا عدد كبير من المحاولات. انتظر قليلاً ثم أعد المحاولة.'
+        : 'That is a lot of attempts. Please wait a moment and try again.';
+    case 'RSVP_REFUSED':
+    case 'NOT_FOUND':
+      return arabic
+        ? 'هذه الدعوة لم تعد تستقبل الردود.'
+        : 'This invitation is no longer accepting replies.';
+    case 'HUMAN_CHECK_REQUIRED':
+      return arabic
+        ? 'نحتاج تأكيداً بسيطاً أنك لست روبوتاً. أعد المحاولة.'
+        : 'We need a quick check that you are not a robot. Please try again.';
+    default:
+      return arabic
+        ? 'تحقّق من الاسم وعدد الأشخاص ثم أعد المحاولة.'
+        : 'Please check the name and number of guests, then try again.';
+  }
+}
+
 // ── scroll reveal ───────────────────────────────────────────────────────────
 
 /**
@@ -268,6 +382,7 @@ export function enhanceInvitation(root: Document = document): Cleanup {
     wireMusic(root),
     wireGallery(root),
     wireShare(root),
+    wireRsvp(root),
     wireReveal(root),
   ];
   // Marks the page as enhanced, which is what the end-to-end tests wait on

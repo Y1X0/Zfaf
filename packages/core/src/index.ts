@@ -26,6 +26,12 @@ export * from './invitation/usecases/publish-invitation.js';
 export * from './invitation/usecases/manage-publication.js';
 export * from './invitation/ports/invitation-repository.js';
 
+// ── rsvp (M7) ───────────────────────────────────────────────────────────────
+export * from './rsvp/domain/rsvp-submission.js';
+export * from './rsvp/domain/rsvp-csv.js';
+export * from './rsvp/ports/rsvp-repository.js';
+export * from './rsvp/usecases/submit-rsvp.js';
+
 // ── template domain (ADR-0004) ──────────────────────────────────────────────
 export * from './template/domain/theme.js';
 export * from './template/domain/section.js';

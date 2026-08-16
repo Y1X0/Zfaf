@@ -99,6 +99,24 @@ export interface SectionRenderProps<P = Record<string, unknown>> {
   readonly index: number;
   /** Stable per-section id, used for anchors and test hooks. */
   readonly sectionId: string;
+  /**
+   * Where the RSVP form posts, when it is rendered for a published invitation.
+   *
+   * Absent in preview, and absent for every section that does not submit
+   * anything — a section still cannot reach outside itself, it is simply told
+   * the one address it is allowed to name. Passing the invitation's *slug*
+   * would be worse: the section would then be constructing a URL, which is
+   * exactly the knowledge this contract keeps out of sections.
+   */
+  readonly formAction?: string | undefined;
+  /**
+   * The outcome of a form post the guest has just been redirected back from.
+   *
+   * Read from the query string by the caller. It exists because the public
+   * page has no client framework to hold that state (ADR-0020), so a guest
+   * with JavaScript disabled is told what happened by the server render.
+   */
+  readonly formStatus?: 'ok' | 'invalid' | 'closed' | 'rate' | 'check' | undefined;
 }
 
 /** Validates and normalises a variant's props. Pure — no I/O, no randomness. */

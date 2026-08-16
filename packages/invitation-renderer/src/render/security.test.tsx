@@ -599,9 +599,21 @@ describe('a section cannot reach beyond its props', () => {
     renderToStaticMarkup(<InvitationRenderer snapshot={snapshot} registry={registry} />);
 
     expect(seen).toHaveLength(1);
+    /**
+     * The contract in full, and it is deliberately an exact list.
+     *
+     * `formAction` and `formStatus` joined it in M7 so the RSVP form can post
+     * without a section constructing a URL. Both are inert data — a string the
+     * *caller* decided, and a value from a closed set — and neither is a
+     * capability: a section still cannot fetch, query or learn who is asking.
+     * Any future addition should have to pass the same bar, which is why this
+     * assertion names every key rather than checking for absences.
+     */
     expect(seen[0]).toEqual([
       'content',
       'dir',
+      'formAction',
+      'formStatus',
       'index',
       'locale',
       'mode',
@@ -612,6 +624,9 @@ describe('a section cannot reach beyond its props', () => {
     // No callable arrived with the props: a function is how a capability would
     // be smuggled in.
     expect(values.some((value) => typeof value === 'function')).toBe(false);
+    // And nothing arrived that a section could call into or walk: the two
+    // additions are a string and a string, or absent.
+    expect(values.every((value) => value === undefined || typeof value !== 'symbol')).toBe(true);
   });
 
   it('is handed no tenant, account, invitation or repository identifier', () => {

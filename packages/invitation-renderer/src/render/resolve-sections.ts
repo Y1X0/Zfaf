@@ -44,6 +44,10 @@ export interface SectionDiagnostic {
 export interface ResolveSectionsOptions {
   readonly mode?: 'preview' | 'published';
   readonly registry?: SectionRegistry;
+  /** Where a form section posts. Absent in preview, where nothing submits. */
+  readonly formAction?: string | undefined;
+  /** The outcome of a form post the guest was redirected back from. */
+  readonly formStatus?: SectionRenderProps['formStatus'];
 }
 
 export function resolveSections(
@@ -108,6 +112,8 @@ export function resolveSections(
           mode,
           index,
           sectionId: section.id,
+          formAction: options.formAction,
+          formStatus: options.formStatus,
         },
       },
     ];

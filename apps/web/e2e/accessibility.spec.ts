@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 
 import { cleanupSeeded, seedBuilder, seedPublished } from './fixtures/seed.js';
 
@@ -25,6 +25,21 @@ import { cleanupSeeded, seedBuilder, seedPublished } from './fixtures/seed.js';
 
 const STANDARD = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
+/**
+ * Waits for the entry animations to finish before measuring.
+ *
+ * Contrast is a property of the *rendered* page. Sections fade in over 450ms,
+ * and a colour sampled at 60% opacity is not the colour anyone reads — the
+ * submit button measures 3.49:1 mid-fade and 4.90:1 once it has arrived.
+ * Sampling early would fail a page that is compliant, and the usual response
+ * to that is to loosen the threshold, which is the wrong repair.
+ */
+async function settled(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((animation) => animation.playState === 'finished'),
+  );
+}
+
 test.afterAll(async () => {
   await cleanupSeeded();
 });
@@ -33,6 +48,7 @@ test('the published invitation has no serious accessibility violations', async (
   const seeded = await seedPublished();
   await page.goto(`/i/${seeded.slug}`);
   await expect(page.locator('.zf-invitation')).toBeVisible();
+  await settled(page);
 
   const results = await new AxeBuilder({ page }).withTags(STANDARD).analyze();
   const blocking = results.violations.filter(
@@ -66,6 +82,7 @@ test('the unavailable page is accessible too', async ({ page }) => {
   // The page a guest lands on when a link has expired is the one they are most
   // likely to be confused by, so it is worth the same care.
   await page.goto('/i/no-such-invitation-anywhere');
+  await settled(page);
   const results = await new AxeBuilder({ page }).withTags(STANDARD).analyze();
   const blocking = results.violations.filter(
     (violation) => violation.impact === 'serious' || violation.impact === 'critical',
@@ -88,6 +105,7 @@ test('the builder has no serious accessibility violations', async ({ page, conte
 
   await page.goto(`/builder/${seeded.invitationId}`);
   await expect(page.getByTestId('groom-name')).toBeVisible();
+  await settled(page);
 
   const results = await new AxeBuilder({ page })
     .withTags(STANDARD)
@@ -96,6 +114,49 @@ test('the builder has no serious accessibility violations', async ({ page, conte
     .exclude('iframe')
     .analyze();
 
+  const blocking = results.violations.filter(
+    (violation) => violation.impact === 'serious' || violation.impact === 'critical',
+  );
+  expect(blocking.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
+});
+
+test('the RSVP form is reachable and labelled', async ({ page }) => {
+  // A guest replying with a screen reader gets the same form everyone else
+  // does, so every control needs a name and the outcome needs announcing.
+  const seeded = await seedPublished();
+  await page.goto(`/i/${seeded.slug}`);
+  await settled(page);
+
+  await expect(page.getByRole('textbox', { name: /الاسم/ })).toBeVisible();
+  await expect(page.getByRole('group', { name: /هل ستحضر/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /إرسال/ })).toBeEnabled();
+  // The live region is present before it has anything to say: one added at the
+  // same moment its content arrives is frequently never announced.
+  await expect(page.locator('[data-rsvp-status][aria-live="polite"]')).toHaveCount(1);
+});
+
+test('the replies dashboard has no serious accessibility violations', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const seeded = await seedPublished();
+  await context.addCookies([
+    {
+      name: '__Host-zfaf_session',
+      value: seeded.sessionToken,
+      url: baseURL ?? 'https://127.0.0.1:3100',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ]);
+
+  await page.goto(`/dashboard/invitations/${seeded.invitationId}/rsvps`);
+  await expect(page.getByTestId('rsvp-stats')).toBeVisible();
+  await settled(page);
+
+  const results = await new AxeBuilder({ page }).withTags(STANDARD).analyze();
   const blocking = results.violations.filter(
     (violation) => violation.impact === 'serious' || violation.impact === 'critical',
   );

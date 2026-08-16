@@ -1,0 +1,203 @@
+/**
+ * The dashboard's own styles (M7).
+ *
+ * Mobile-first and logical-property only, like the builder (ADR-0011): a
+ * couple checks their replies on a phone far more often than on a laptop, and
+ * the page is read right-to-left by default.
+ */
+
+.zfd {
+  --zfd-bg: #faf7f2;
+  --zfd-surface: #ffffff;
+  --zfd-border: #e4ded4;
+  --zfd-text: #221f1b;
+  --zfd-muted: #6b6154;
+  --zfd-accent: #8a6d24;
+  --zfd-radius: 10px;
+  --zfd-tap: 44px;
+
+  min-block-size: 100dvh;
+  padding: 1rem;
+  background: var(--zfd-bg);
+  color: var(--zfd-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  line-height: 1.7;
+}
+
+.zfd__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 1rem;
+}
+
+.zfd__title {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.zfd-btn {
+  display: inline-grid;
+  place-items: center;
+  min-block-size: var(--zfd-tap);
+  min-inline-size: var(--zfd-tap);
+  padding-inline: 1rem;
+  border: 1px solid var(--zfd-border);
+  border-radius: var(--zfd-radius);
+  background: var(--zfd-surface);
+  color: var(--zfd-text);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.zfd-btn--quiet {
+  color: var(--zfd-muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Four across on a phone: the numbers are short and the couple wants them
+   at a glance, not stacked down a scroll. */
+.zfd-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+}
+
+@media (min-width: 30rem) {
+  .zfd-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.zfd-stat {
+  padding: 0.75rem;
+  border: 1px solid var(--zfd-border);
+  border-radius: var(--zfd-radius);
+  background: var(--zfd-surface);
+  text-align: center;
+}
+
+.zfd-stat__value {
+  display: block;
+  font-size: 1.5rem;
+  color: var(--zfd-accent);
+}
+
+.zfd-stat__label {
+  font-size: 0.8rem;
+  color: var(--zfd-muted);
+}
+
+.zfd-controls {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-end: 1rem;
+}
+
+.zfd-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.zfd-field__label {
+  font-size: 0.85rem;
+  color: var(--zfd-muted);
+}
+
+.zfd-field__input {
+  min-block-size: var(--zfd-tap);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--zfd-border);
+  border-radius: var(--zfd-radius);
+  background: var(--zfd-surface);
+  color: var(--zfd-text);
+  font: inherit;
+}
+
+.zfd-filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.zfd-chip {
+  min-block-size: var(--zfd-tap);
+  padding-inline: 1rem;
+  border: 1px solid var(--zfd-border);
+  border-radius: 999px;
+  background: var(--zfd-surface);
+  color: var(--zfd-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.zfd-chip[aria-pressed='true'] {
+  background: var(--zfd-accent);
+  border-color: var(--zfd-accent);
+  color: #fff;
+}
+
+.zfd-list {
+  list-style: none;
+  padding-inline-start: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.zfd-row {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--zfd-border);
+  border-radius: var(--zfd-radius);
+  background: var(--zfd-surface);
+}
+
+.zfd-row__main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.zfd-row__name {
+  font-weight: 600;
+  /* A guest may type a very long name; it wraps rather than widening the page. */
+  overflow-wrap: anywhere;
+}
+
+.zfd-row__meta,
+.zfd-row__note {
+  color: var(--zfd-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.zfd-row__phone {
+  color: var(--zfd-accent);
+  min-block-size: var(--zfd-tap);
+  display: inline-flex;
+  align-items: center;
+}
+
+.zfd-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--zfd-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
