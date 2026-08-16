@@ -273,8 +273,16 @@ export async function readDraft(invitationId: string): Promise<{
  * builder tests need to type into it. Publishing needs a draft that has what
  * an invitation must have, and nothing more.
  */
-function filledDraft(timezone: string): Record<string, unknown> {
+function filledDraft(
+  timezone: string,
+  themeColors?: Readonly<Record<string, string>>,
+): Record<string, unknown> {
   const base = draftDocument(timezone) as Record<string, unknown>;
+
+  if (themeColors) {
+    const theme = base['theme'] as Record<string, Record<string, unknown>>;
+    theme['colors'] = { ...theme['colors'], ...themeColors };
+  }
 
   // A countdown, because it is the one section with client behaviour and the
   // published page's only moving part.
@@ -309,6 +317,14 @@ export interface SeedPublishedOptions {
   readonly visibility?: 'UNLISTED' | 'INDEXED' | 'PROTECTED';
   readonly expiresAt?: Date | null;
   readonly slug?: string;
+  /**
+   * Palette overrides, for tests about what a *customised* invitation looks
+   * like. The shipped templates all clear WCAG AA, so a suite that only ever
+   * sees the default palette cannot see the class of defect that arrives when
+   * an owner picks her own colours — which is where the M9 contrast failure
+   * lived.
+   */
+  readonly themeColors?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -328,7 +344,7 @@ export async function seedPublished(options: SeedPublishedOptions = {}): Promise
   const seeded = await seedBuilder();
   const timezone = 'UTC';
 
-  const draft = filledDraft(timezone);
+  const draft = filledDraft(timezone, options.themeColors);
   const parsed = parseDraftDocument(draft);
   if (!parsed.ok) throw new Error(`seed draft is invalid: ${parsed.errors.join(', ')}`);
 

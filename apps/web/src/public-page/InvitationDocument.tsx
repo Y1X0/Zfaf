@@ -194,7 +194,7 @@ html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--zf-color-bg,#fff)}
 .zf-share{position:fixed;inset-block-end:1rem;inset-inline-end:1rem;z-index:10;
 min-block-size:44px;min-inline-size:44px;padding:.7rem 1.1rem;border:0;border-radius:999px;
-background:var(--zf-color-primary,#333);color:var(--zf-color-bg,#fff);font:inherit;font-size:.95rem;
+background:var(--zf-color-primary,#333);color:var(--zf-color-on-primary,var(--zf-color-bg,#fff));font:inherit;font-size:.95rem;
 cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.18)}
 .zf-share[data-copied]::after{content:' ✓'}
 .zf-rsvp__status:empty{display:none}

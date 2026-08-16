@@ -7,7 +7,7 @@ import { DEFAULT_LOCALE, type Locale } from './routing.js';
  * decision with a measured number behind it. `Link` is a client component: one
  * of them anywhere on a page pulls React's whole client runtime into a
  * document that otherwise needs none. Measured on the marketing pages, that is
- * **157 KB against a 120 KB budget** — versus 8 KB when every link is a plain
+ * **157 KB against a 144 KB budget** (ADR-0021) — versus 8 KB when every link is a plain
  * `<a>`.
  *
  * The marketing and legal pages are text. Full-page navigation between them is

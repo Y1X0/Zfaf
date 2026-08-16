@@ -34,7 +34,7 @@ export const viewport: Viewport = {
  * whole application in one hands the entire message catalogue to the browser
  * on every page — including the marketing pages, which are static server
  * components that need none of it. Measured, that was 35 KB of JSON on a route
- * with a 120 KB budget. The provider lives around the two client islands
+ * against a 144 KB budget (ADR-0021). The provider lives around the client islands
  * instead, each given only the namespaces it uses.
  *
  * The fonts are preloaded here rather than being discovered inside a

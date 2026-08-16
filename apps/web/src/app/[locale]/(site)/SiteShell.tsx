@@ -11,7 +11,8 @@ import type { Locale } from '../../../i18n/routing.js';
  * whole design rather than an aspiration. Every link is a plain `<a>`; there
  * is no router, no island, and no provider. next-intl's `Link` and a
  * client-side language switch would each pull React's client runtime onto a
- * page made of text — measured at 157 KB against a 120 KB budget, versus 8 KB
+ * page made of text — measured at 157 KB against a 144 KB budget (ADR-0021),
+ * versus 8 KB
  * without them.
  *
  * The current path arrives as a prop because Next does not give a Server

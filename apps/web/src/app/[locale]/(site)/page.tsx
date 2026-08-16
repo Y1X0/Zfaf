@@ -9,9 +9,9 @@ import { SiteShell } from './SiteShell.js';
  * The home page (D9.4).
  *
  * Server-rendered, no client island, no carousel and no animation library. The
- * budget for this route is 120 KB of JavaScript (docs/07 §10) and almost all of
- * it is already spent by the App Router runtime before we write a line — so
- * what is here is text, links and a font.
+ * budget for this route is 144 KB of JavaScript (ADR-0021) and 138.4 KB of it
+ * is already spent by the App Router runtime before we write a line — so what
+ * is here is text, links and a font, and our own contribution measures zero.
  *
  * The four claims below are the four the product can actually keep, and each is
  * checked somewhere in the test suite rather than being copy: it opens

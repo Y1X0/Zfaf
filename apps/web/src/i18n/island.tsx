@@ -8,7 +8,8 @@ import { getLocale, getMessages } from 'next-intl/server';
  * `NextIntlClientProvider` with no `messages` prop serialises the **whole**
  * catalogue into the page. On the builder that is merely wasteful; on a
  * marketing page it is 35 KB of JSON that no component reads, on a route with a
- * 120 KB budget. So the provider is not at the root — it wraps each island, and
+ * 144 KB budget (ADR-0021). So the provider is not at the root — it wraps each
+ * island, and
  * each island names its namespaces.
  *
  * Server components do not need this at all: `useTranslations` reads the

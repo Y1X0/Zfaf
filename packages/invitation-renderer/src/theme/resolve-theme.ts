@@ -3,8 +3,8 @@ import {
   type Theme,
   type ThemeOverrides,
   ThemeSchema,
+  adjustToContrast,
   checkThemeContrast,
-  contrastRatio,
   WCAG_AA_NORMAL_TEXT,
 } from '@zfaf/core';
 
@@ -56,39 +56,15 @@ function mergeTheme(base: Theme, overrides: ThemeOverrides | undefined): unknown
 }
 
 /**
- * Darkens or lightens a hex colour until it clears a contrast ratio.
- *
  * Adjusts rather than rejects. Refusing a bride's chosen palette outright is
  * worse product behaviour than telling her it will be hard to read and offering
  * the nearest colour that works (docs/05-template-engine.md §6).
+ *
+ * The walk itself lives in `@zfaf/core` alongside `contrastRatio`, so the
+ * builder's preview, this guard and the rendered stylesheet cannot drift apart
+ * — the local copy that used to live here walked the wrong way and never
+ * converged.
  */
-function adjustForContrast(foreground: string, background: string, required: number): string {
-  const parsed = /^#([0-9a-fA-F]{6})$/.exec(foreground);
-  if (!parsed) return foreground;
-
-  const backgroundLuminance = contrastRatio('#ffffff', background);
-  // A light background needs darker text, and the reverse.
-  const darken = backgroundLuminance !== null && backgroundLuminance < 2;
-
-  let channels = [
-    Number.parseInt((parsed[1] as string).slice(0, 2), 16),
-    Number.parseInt((parsed[1] as string).slice(2, 4), 16),
-    Number.parseInt((parsed[1] as string).slice(4, 6), 16),
-  ];
-
-  for (let step = 0; step < 40; step += 1) {
-    const candidate = `#${channels.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
-    const ratio = contrastRatio(candidate, background);
-    if (ratio !== null && ratio >= required) return candidate;
-
-    channels = channels.map((channel) =>
-      darken ? Math.min(255, channel + 8) : Math.max(0, channel - 8),
-    );
-  }
-
-  // Fall back to the extreme that is guaranteed to pass.
-  return darken ? '#ffffff' : '#000000';
-}
 
 export function resolveTheme(base: Theme, overrides?: ThemeOverrides): ResolvedTheme {
   const merged = mergeTheme(base, overrides);
@@ -110,12 +86,12 @@ export function resolveTheme(base: Theme, overrides?: ThemeOverrides): ResolvedT
     ...theme,
     colors: {
       ...theme.colors,
-      textPrimary: adjustForContrast(
+      textPrimary: adjustToContrast(
         theme.colors.textPrimary,
         theme.colors.background,
         WCAG_AA_NORMAL_TEXT,
       ),
-      textSecondary: adjustForContrast(
+      textSecondary: adjustToContrast(
         theme.colors.textSecondary,
         theme.colors.background,
         WCAG_AA_NORMAL_TEXT,

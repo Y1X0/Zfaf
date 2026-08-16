@@ -60,6 +60,33 @@ test('the published invitation has no serious accessibility violations', async (
   expect(blocking.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
 });
 
+test('a customised palette still passes contrast on every control', async ({ page }) => {
+  /**
+   * The palette below is one a real owner chose, and it is the one Lighthouse
+   * caught in M9: `#b8860b` on ivory rendered the share button in near-white on
+   * gold at 3.2:1, against a 4.5:1 requirement.
+   *
+   * The default fixture palette clears the bar comfortably, which is exactly
+   * why the suite could not see this — every shipped template is fine, and the
+   * failure only exists once somebody picks her own colours. So this test
+   * deliberately seeds the palette that failed rather than a safe one.
+   */
+  const seeded = await seedPublished({ themeColors: { primary: '#b8860b' } });
+  await page.goto(`/i/${seeded.slug}`);
+  await expect(page.locator('.zf-invitation')).toBeVisible();
+  // The share control is rendered `hidden` and revealed by the script, and axe
+  // skips hidden elements — so waiting for it is what makes this test real.
+  await expect(page.locator('.zf-share')).toBeVisible();
+  await settled(page);
+
+  const results = await new AxeBuilder({ page }).withTags(STANDARD).analyze();
+  const contrast = results.violations.filter((violation) => violation.id === 'color-contrast');
+
+  expect(
+    contrast.flatMap((violation) => violation.nodes.map((node) => node.failureSummary)),
+  ).toEqual([]);
+});
+
 test('the invitation announces itself in the right language and direction', async ({ page }) => {
   // An Arabic invitation marked `lang="en"` is read aloud by a screen reader in
   // an English voice — technically rendering, practically unusable.

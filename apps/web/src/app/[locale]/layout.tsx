@@ -23,8 +23,8 @@ import { routing } from '../../i18n/routing.js';
  *
  * There is deliberately **no `NextIntlClientProvider` here**. The provider is
  * itself a client component, and one anywhere in the tree pulls React's whole
- * client runtime into pages made of text — measured at 151 KB against a 120 KB
- * budget. The marketing and legal pages use plain `<a>` elements and
+ * client runtime into pages made of text — measured at 151 KB against the
+ * 144 KB budget ADR-0021 sets from the measured framework floor. The marketing and legal pages use plain `<a>` elements and
  * server-side translation, so they need no context at all; the genuinely
  * interactive islands get their own provider, with only their own namespaces,
  * through `IslandMessages`.

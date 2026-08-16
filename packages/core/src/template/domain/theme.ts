@@ -176,6 +176,18 @@ export function checkThemeContrast(theme: Theme): readonly ContrastWarning[] {
     ],
     ['textPrimary/surface', theme.colors.textPrimary, theme.colors.surface, WCAG_AA_NORMAL_TEXT],
     ['primary/background', theme.colors.primary, theme.colors.background, WCAG_AA_LARGE_TEXT],
+    /**
+     * Text sitting **on** the primary colour — every solid button, the RSVP
+     * submit, the hero seal, the share control.
+     *
+     * This pair was missing until M9, and its absence was not theoretical: a
+     * published invitation whose owner picked `#b8860b` on an ivory background
+     * rendered white-on-gold at 3.2:1, failing WCAG AA on the one control a
+     * guest has to press. Every shipped template clears it comfortably, so the
+     * gap only ever opened through a customised palette — which is exactly the
+     * input the guard exists for.
+     */
+    ['background/primary', theme.colors.background, theme.colors.primary, WCAG_AA_NORMAL_TEXT],
   ];
 
   for (const [pair, foreground, background, required] of pairs) {
@@ -185,4 +197,71 @@ export function checkThemeContrast(theme: Theme): readonly ContrastWarning[] {
     }
   }
   return warnings;
+}
+
+/**
+ * A foreground that is legible on `background`, whatever `background` is.
+ *
+ * `preferred` is tried first, so an invitation whose palette already works
+ * keeps the exact colour its designer chose and nothing shifts. Only when the
+ * preferred colour falls below AA does this reach for black or white — and
+ * whichever of those two wins is guaranteed to clear 4.5:1, because the worst
+ * case for any colour (a mid-tone grey, where both are equally poor) still
+ * measures about 4.58:1 against the better of them.
+ *
+ * This is a *rendering* guarantee, deliberately separate from the warning
+ * above. The warning tells the owner in the builder that her palette is hard
+ * to read; this makes sure the guest can read it regardless of whether anyone
+ * acted on that warning — a guest who cannot find the RSVP button is not an
+ * acceptable outcome of a colour choice.
+ */
+export function readableForegroundOn(
+  background: string,
+  preferred: string,
+  required: number = WCAG_AA_NORMAL_TEXT,
+): string {
+  const preferredRatio = contrastRatio(preferred, background);
+  if (preferredRatio === null) return preferred;
+  if (preferredRatio >= required) return preferred;
+
+  const white = contrastRatio('#ffffff', background) ?? 0;
+  const black = contrastRatio('#000000', background) ?? 0;
+  return white >= black ? '#ffffff' : '#000000';
+}
+
+/**
+ * Nudges a colour along the light/dark axis until it clears a ratio, keeping
+ * as much of its hue as the requirement allows.
+ *
+ * Used where the colour itself is the point — an accent used as link text — so
+ * flipping it to black or white would lose the palette entirely. A light
+ * background is walked **downwards** towards black and a dark one upwards
+ * towards white; getting that direction backwards produces a colour that fails
+ * harder on every iteration, which is what the earlier renderer-local copy of
+ * this function did (it never converged and returned white on ivory).
+ */
+export function adjustToContrast(
+  foreground: string,
+  background: string,
+  required: number = WCAG_AA_NORMAL_TEXT,
+): string {
+  const rgb = parseHex(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  if (!rgb || backgroundLuminance === null) return foreground;
+
+  // A light background needs darker text, and the reverse. 0.18 is the
+  // luminance midpoint at which the two directions are equally good.
+  const step = backgroundLuminance > 0.18 ? -8 : 8;
+
+  let channels = [rgb.r, rgb.g, rgb.b];
+  for (let iteration = 0; iteration < 48; iteration += 1) {
+    const candidate = `#${channels.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+    const ratio = contrastRatio(candidate, background);
+    if (ratio !== null && ratio >= required) return candidate;
+    channels = channels.map((channel) => Math.max(0, Math.min(255, channel + step)));
+  }
+
+  // The extreme in the direction we were walking always clears AA against a
+  // background that needed adjusting at all.
+  return step < 0 ? '#000000' : '#ffffff';
 }
