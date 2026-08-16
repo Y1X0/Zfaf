@@ -84,9 +84,23 @@ const proxy = createServer(
         port: upstreamPort,
         path: incoming.url,
         method: incoming.method,
-        // `x-forwarded-proto` is what tells the app it is behind TLS, so a
-        // Secure cookie it sets is not rejected as inconsistent.
-        headers: { ...incoming.headers, 'x-forwarded-proto': 'https' },
+        /**
+         * The forwarded pair, and it has to be a pair.
+         *
+         * `x-forwarded-proto` tells the app it is behind TLS. On its own it
+         * makes Next build request URLs as `https://` against the *upstream's*
+         * own address — a plain-HTTP port — so any middleware rewrite becomes
+         * an "external" destination that Next then tries to reach over TLS,
+         * and the handshake fails with a protocol error. Sending the public
+         * host alongside it keeps the app's idea of its own origin equal to
+         * the one the browser used, which is what a real load balancer does
+         * and what makes an internal rewrite stay internal.
+         */
+        headers: {
+          ...incoming.headers,
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': `127.0.0.1:${publicPort}`,
+        },
       },
       (response) => {
         outgoing.writeHead(response.statusCode ?? 502, response.headers);

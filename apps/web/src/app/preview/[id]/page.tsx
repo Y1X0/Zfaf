@@ -4,6 +4,7 @@ import { tenantScopeFor } from '@zfaf/core';
 
 import { container } from '../../../server/container.js';
 import { requireActor } from '../../../server/request-context.js';
+import { IslandMessages } from '../../../i18n/island.js';
 import { PreviewFrame } from './PreviewFrame.js';
 
 /**
@@ -40,5 +41,9 @@ export default async function PreviewPage({
   // differ, which is the property M3 spent its determinism tests protecting.
   const previewedAt = new Date().toISOString();
 
-  return <PreviewFrame initialDocument={invitation.draftDocument} previewedAt={previewedAt} />;
+  return (
+    <IslandMessages namespaces={['builder']}>
+      <PreviewFrame initialDocument={invitation.draftDocument} previewedAt={previewedAt} />
+    </IslandMessages>
+  );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactElement, useId } from 'react';
+import { useTranslations } from 'next-intl';
 
 import type { DraftDocument } from '@zfaf/core';
 
@@ -58,31 +59,36 @@ function Field({
 
 export function CoupleStep({ document, builder }: StepProps): ReactElement {
   const { couple } = document.content;
+  const t = useTranslations('builder.couple');
 
   return (
     <div className="zfb-form">
       <div className="zfb-row">
-        <Field label="اسم العريس">
+        <Field label={t('groomName')}>
           {(id) => (
             <input
               id={id}
               className="zfb-field__input"
               data-testid="groom-name"
               value={couple.groomName}
-              onChange={(event) => builder.edit('اسم العريس', edits.groomName(event.target.value))}
+              onChange={(event) =>
+                builder.edit('couple.groomName', edits.groomName(event.target.value))
+              }
               maxLength={80}
               autoComplete="off"
             />
           )}
         </Field>
-        <Field label="اسم العروس">
+        <Field label={t('brideName')}>
           {(id) => (
             <input
               id={id}
               className="zfb-field__input"
               data-testid="bride-name"
               value={couple.brideName}
-              onChange={(event) => builder.edit('اسم العروس', edits.brideName(event.target.value))}
+              onChange={(event) =>
+                builder.edit('couple.brideName', edits.brideName(event.target.value))
+              }
               maxLength={80}
               autoComplete="off"
             />
@@ -90,7 +96,7 @@ export function CoupleStep({ document, builder }: StepProps): ReactElement {
         </Field>
       </div>
 
-      <Field label="رسالة الدعوة" hint="تظهر أسفل الأسماء. اتركها فارغة لإخفائها.">
+      <Field label={t('message')} hint={t('messageHint')}>
         {(id, describedBy) => (
           <textarea
             id={id}
@@ -98,7 +104,7 @@ export function CoupleStep({ document, builder }: StepProps): ReactElement {
             data-testid="couple-message"
             value={couple.message ?? ''}
             onChange={(event) =>
-              builder.edit('رسالة الدعوة', edits.coupleMessage(event.target.value))
+              builder.edit('couple.message', edits.coupleMessage(event.target.value))
             }
             maxLength={2000}
             {...(describedBy ? { 'aria-describedby': describedBy } : {})}
@@ -107,19 +113,16 @@ export function CoupleStep({ document, builder }: StepProps): ReactElement {
       </Field>
 
       <details className="zfb-panel">
-        <summary className="zfb-panel__summary">خيارات إضافية</summary>
+        <summary className="zfb-panel__summary">{t('more')}</summary>
         <div className="zfb-panel__body">
-          <Field
-            label="الاسم المختصر"
-            hint="يُستخدم في القوالب التي تعرض اسماً قصيراً، مثل «أ & س»."
-          >
+          <Field label={t('shortName')} hint={t('shortNameHint')}>
             {(id, describedBy) => (
               <input
                 id={id}
                 className="zfb-field__input"
                 value={couple.shortName ?? ''}
                 onChange={(event) =>
-                  builder.edit('الاسم المختصر', edits.shortName(event.target.value))
+                  builder.edit('couple.shortName', edits.shortName(event.target.value))
                 }
                 maxLength={40}
                 {...(describedBy ? { 'aria-describedby': describedBy } : {})}
@@ -152,6 +155,7 @@ function detectedTimezone(): string | null {
 }
 
 export function DateStep({ document, builder }: StepProps): ReactElement {
+  const t = useTranslations('builder.date');
   const { wedding } = document.content;
   const detected = detectedTimezone();
   // The invitation's own zone comes first; it was set from the market when the
@@ -161,7 +165,7 @@ export function DateStep({ document, builder }: StepProps): ReactElement {
 
   return (
     <div className="zfb-form">
-      <Field label="تاريخ الحفل">
+      <Field label={t('weddingDate')}>
         {(id) => (
           <input
             id={id}
@@ -169,13 +173,15 @@ export function DateStep({ document, builder }: StepProps): ReactElement {
             data-testid="wedding-date"
             type="date"
             value={wedding.date ?? ''}
-            onChange={(event) => builder.edit('التاريخ', edits.weddingDate(event.target.value))}
+            onChange={(event) =>
+              builder.edit('wedding.date', edits.weddingDate(event.target.value))
+            }
           />
         )}
       </Field>
 
       <div className="zfb-row">
-        <Field label="وقت البداية">
+        <Field label={t('startTime')}>
           {(id) => (
             <input
               id={id}
@@ -184,12 +190,12 @@ export function DateStep({ document, builder }: StepProps): ReactElement {
               type="time"
               value={wedding.startTime ?? ''}
               onChange={(event) =>
-                builder.edit('وقت البداية', edits.weddingStartTime(event.target.value))
+                builder.edit('wedding.startTime', edits.weddingStartTime(event.target.value))
               }
             />
           )}
         </Field>
-        <Field label="وقت النهاية">
+        <Field label={t('endTime')}>
           {(id) => (
             <input
               id={id}
@@ -197,7 +203,7 @@ export function DateStep({ document, builder }: StepProps): ReactElement {
               type="time"
               value={wedding.endTime ?? ''}
               onChange={(event) =>
-                builder.edit('وقت النهاية', edits.weddingEndTime(event.target.value))
+                builder.edit('wedding.endTime', edits.weddingEndTime(event.target.value))
               }
             />
           )}
@@ -205,11 +211,11 @@ export function DateStep({ document, builder }: StepProps): ReactElement {
       </div>
 
       <Field
-        label="المنطقة الزمنية"
+        label={t('timezone')}
         hint={
           wedding.startTime
-            ? `الحفل الساعة ${wedding.startTime} بتوقيت ${wedding.timezone}`
-            : 'يُعرض للضيوف بتوقيت الحفل، لا بتوقيت أجهزتهم.'
+            ? t('timezoneAt', { time: wedding.startTime, zone: wedding.timezone })
+            : t('timezoneHint')
         }
       >
         {(id, describedBy) => (
@@ -219,14 +225,14 @@ export function DateStep({ document, builder }: StepProps): ReactElement {
             data-testid="wedding-timezone"
             value={wedding.timezone}
             onChange={(event) =>
-              builder.edit('المنطقة الزمنية', edits.timezone(event.target.value))
+              builder.edit('wedding.timezone', edits.timezone(event.target.value))
             }
             {...(describedBy ? { 'aria-describedby': describedBy } : {})}
           >
             {zones.map((zone) => (
               <option key={zone} value={zone}>
                 {zone}
-                {zone === detected ? ' (جهازك)' : ''}
+                {zone === detected ? ` ${t('deviceZone')}` : ''}
               </option>
             ))}
           </select>
@@ -263,39 +269,41 @@ export function parseMapsCoordinates(url: string): { latitude: number; longitude
 }
 
 export function LocationStep({ document, builder }: StepProps): ReactElement {
+  const t = useTranslations('builder.location');
   const { location } = document.content;
 
   return (
     <div className="zfb-form">
-      <Field label="اسم القاعة">
+      <Field label={t('venueName')}>
         {(id) => (
           <input
             id={id}
             className="zfb-field__input"
             data-testid="venue-name"
             value={location.venueName ?? ''}
-            onChange={(event) => builder.edit('اسم القاعة', edits.venueName(event.target.value))}
+            onChange={(event) =>
+              builder.edit('location.venueName', edits.venueName(event.target.value))
+            }
             maxLength={200}
           />
         )}
       </Field>
 
-      <Field label="العنوان">
+      <Field label={t('address')}>
         {(id) => (
           <input
             id={id}
             className="zfb-field__input"
             value={location.address ?? ''}
-            onChange={(event) => builder.edit('العنوان', edits.venueAddress(event.target.value))}
+            onChange={(event) =>
+              builder.edit('location.address', edits.venueAddress(event.target.value))
+            }
             maxLength={500}
           />
         )}
       </Field>
 
-      <Field
-        label="رابط الموقع على الخرائط"
-        hint="الصق الرابط من تطبيق الخرائط؛ نستخرج الإحداثيات تلقائياً."
-      >
+      <Field label={t('mapsUrl')} hint={t('mapsUrlHint')}>
         {(id, describedBy) => (
           <input
             id={id}
@@ -306,9 +314,9 @@ export function LocationStep({ document, builder }: StepProps): ReactElement {
             value={location.mapsUrl ?? ''}
             onChange={(event) => {
               const value = event.target.value;
-              builder.edit('رابط الخريطة', edits.mapsUrl(value));
+              builder.edit('location.mapsUrl', edits.mapsUrl(value));
               const parsed = parseMapsCoordinates(value);
-              if (parsed) builder.edit('إحداثيات الموقع', edits.coordinates(parsed));
+              if (parsed) builder.edit('location.coordinates', edits.coordinates(parsed));
             }}
             {...(describedBy ? { 'aria-describedby': describedBy } : {})}
           />
@@ -316,9 +324,9 @@ export function LocationStep({ document, builder }: StepProps): ReactElement {
       </Field>
 
       <details className="zfb-panel">
-        <summary className="zfb-panel__summary">إدخال يدوي متقدم</summary>
+        <summary className="zfb-panel__summary">{t('advanced')}</summary>
         <div className="zfb-panel__body zfb-row">
-          <Field label="خط العرض">
+          <Field label={t('latitude')}>
             {(id) => (
               <input
                 id={id}
@@ -327,7 +335,7 @@ export function LocationStep({ document, builder }: StepProps): ReactElement {
                 step="any"
                 value={location.latitude ?? ''}
                 onChange={(event) =>
-                  builder.edit('خط العرض', [
+                  builder.edit('location.latitude', [
                     {
                       op: 'replace',
                       path: '/content/location/latitude',
@@ -338,7 +346,7 @@ export function LocationStep({ document, builder }: StepProps): ReactElement {
               />
             )}
           </Field>
-          <Field label="خط الطول">
+          <Field label={t('longitude')}>
             {(id) => (
               <input
                 id={id}
@@ -347,7 +355,7 @@ export function LocationStep({ document, builder }: StepProps): ReactElement {
                 step="any"
                 value={location.longitude ?? ''}
                 onChange={(event) =>
-                  builder.edit('خط الطول', [
+                  builder.edit('location.longitude', [
                     {
                       op: 'replace',
                       path: '/content/location/longitude',
@@ -366,19 +374,22 @@ export function LocationStep({ document, builder }: StepProps): ReactElement {
 
 // ── 4. the programme ───────────────────────────────────────────────────────
 
-const EVENT_TYPES = [
-  { value: 'contract', label: 'عقد القران' },
-  { value: 'reception', label: 'استقبال' },
-  { value: 'wedding', label: 'حفل الزفاف' },
-  { value: 'dinner', label: 'عشاء' },
-  { value: 'custom', label: 'أخرى' },
-] as const;
+/**
+ * The event kinds, as keys.
+ *
+ * The value is what the document stores and must never change; the label is
+ * looked up per render, so the same stored `contract` reads "عقد القران" or
+ * "Contract signing" without the document knowing which language it is being
+ * shown in.
+ */
+const EVENT_TYPES = ['contract', 'reception', 'wedding', 'dinner', 'custom'] as const;
 
 export function EventsStep({ document, builder }: StepProps): ReactElement {
+  const t = useTranslations('builder.events');
   const { events, wedding } = document.content;
 
   const addEvent = () => {
-    builder.edit('إضافة حدث', [
+    builder.edit('events.add', [
       {
         op: 'add',
         path: '/content/events/-',
@@ -404,15 +415,13 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
 
   return (
     <div className="zfb-form">
-      <p className="zfb-field__hint">
-        اتركها فارغة إن كان الحفل حدثاً واحداً — القسم لن يظهر في الدعوة.
-      </p>
+      <p className="zfb-field__hint">{t('hint')}</p>
 
       {events.map((event, index) => (
         <fieldset key={event.id} className="zfb-panel" data-testid="event-item">
-          <legend className="zfb-visually-hidden">حدث {index + 1}</legend>
+          <legend className="zfb-visually-hidden">{t('item', { number: index + 1 })}</legend>
           <div className="zfb-panel__body">
-            <Field label="العنوان">
+            <Field label={t('title')}>
               {(id) => (
                 <input
                   id={id}
@@ -421,7 +430,7 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
                   value={event.title}
                   onChange={(changed) =>
                     builder.edit(
-                      'عنوان الحدث',
+                      'events.title',
                       edits.eventField({ index, field: 'title', next: changed.target.value }),
                     )
                   }
@@ -431,7 +440,7 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
             </Field>
 
             <div className="zfb-row">
-              <Field label="النوع">
+              <Field label={t('type')}>
                 {(id) => (
                   <select
                     id={id}
@@ -439,20 +448,20 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
                     value={event.type}
                     onChange={(changed) =>
                       builder.edit(
-                        'نوع الحدث',
+                        'events.type',
                         edits.eventField({ index, field: 'type', next: changed.target.value }),
                       )
                     }
                   >
                     {EVENT_TYPES.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
+                      <option key={type} value={type}>
+                        {t(`types.${type}`)}
                       </option>
                     ))}
                   </select>
                 )}
               </Field>
-              <Field label="التاريخ">
+              <Field label={t('date')}>
                 {(id) => (
                   <input
                     id={id}
@@ -461,7 +470,7 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
                     value={event.date}
                     onChange={(changed) =>
                       builder.edit(
-                        'تاريخ الحدث',
+                        'events.date',
                         edits.eventField({ index, field: 'date', next: changed.target.value }),
                       )
                     }
@@ -474,16 +483,16 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
               type="button"
               className="zfb-btn"
               data-testid="remove-event"
-              onClick={() => builder.edit('حذف حدث', edits.removeEvent(index))}
+              onClick={() => builder.edit('events.remove', edits.removeEvent(index))}
             >
-              حذف هذا الحدث
+              {t('remove')}
             </button>
           </div>
         </fieldset>
       ))}
 
       <button type="button" className="zfb-btn" data-testid="add-event" onClick={addEvent}>
-        + إضافة حدث
+        {t('add')}
       </button>
     </div>
   );
@@ -499,44 +508,45 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
  * The file never passes through our servers — see docs/10 §4.
  */
 export function PhotosStep({ document, builder }: StepProps): ReactElement {
+  const t = useTranslations('builder.photos');
   const { gallery, cover } = document.content;
 
   return (
     <div className="zfb-form">
-      <p className="zfb-field__hint">
-        لم ترفع صوراً؟ قسم المعرض لن يظهر في الدعوة — لا حاجة لفعل شيء.
-      </p>
+      <p className="zfb-field__hint">{t('hint')}</p>
 
       <div className="zfb-field">
-        <span className="zfb-field__label">صورة الغلاف</span>
+        <span className="zfb-field__label">{t('cover')}</span>
         {cover ? (
           <div className="zfb-sections__item">
-            <span className="zfb-sections__name">{cover.alt ?? 'صورة الغلاف'}</span>
+            <span className="zfb-sections__name">{cover.alt ?? t('cover')}</span>
             <button
               type="button"
               className="zfb-btn zfb-btn--icon"
-              onClick={() => builder.edit('حذف الغلاف', edits.setCover(null))}
-              aria-label="حذف صورة الغلاف"
+              onClick={() => builder.edit('photos.removeCover', edits.setCover(null))}
+              aria-label={t('removeCover')}
             >
               ✕
             </button>
           </div>
         ) : (
-          <p className="zfb-field__hint">لا توجد صورة غلاف.</p>
+          <p className="zfb-field__hint">{t('noCover')}</p>
         )}
       </div>
 
       <div className="zfb-field">
-        <span className="zfb-field__label">المعرض ({gallery.length})</span>
+        <span className="zfb-field__label">{t('gallery', { count: gallery.length })}</span>
         <ul className="zfb-sections" data-testid="gallery-list">
           {gallery.map((image, index) => (
             <li key={image.id} className="zfb-sections__item">
-              <span className="zfb-sections__name">{image.alt ?? `صورة ${index + 1}`}</span>
+              <span className="zfb-sections__name">
+                {image.alt ?? t('image', { number: index + 1 })}
+              </span>
               <button
                 type="button"
                 className="zfb-btn zfb-btn--icon"
-                onClick={() => builder.edit('حذف صورة', edits.removeGalleryImage(index))}
-                aria-label={`حذف الصورة ${index + 1}`}
+                onClick={() => builder.edit('photos.removeImage', edits.removeGalleryImage(index))}
+                aria-label={t('removeImage', { number: index + 1 })}
               >
                 ✕
               </button>
@@ -546,7 +556,7 @@ export function PhotosStep({ document, builder }: StepProps): ReactElement {
       </div>
 
       <p className="zfb-field__hint" data-testid="upload-note">
-        رفع الصور يتم عبر مسار الرفع المباشر — الملف لا يمرّ بخوادمنا.
+        {t('uploadNote')}
       </p>
     </div>
   );
@@ -562,29 +572,28 @@ export function PhotosStep({ document, builder }: StepProps): ReactElement {
  * largest legal exposure in the product (ADR-0012, docs/10 §8).
  */
 export function MusicStep({ document, builder }: StepProps): ReactElement {
+  const t = useTranslations('builder.music');
   const { music } = document.content;
 
   return (
     <div className="zfb-form">
-      <p className="zfb-field__hint">
-        المقاطع من مكتبة مرخّصة. الرفع غير متاح — راجع سياسة الموسيقى.
-      </p>
+      <p className="zfb-field__hint">{t('hint')}</p>
 
       <div className="zfb-field">
-        <span className="zfb-field__label">المقطع المختار</span>
-        <p data-testid="selected-track">{music.title ?? 'بلا موسيقى'}</p>
+        <span className="zfb-field__label">{t('selected')}</span>
+        <p data-testid="selected-track">{music.title ?? t('none')}</p>
         {music.trackId ? (
           <button
             type="button"
             className="zfb-btn"
             onClick={() =>
               builder.edit(
-                'إزالة الموسيقى',
+                'music.remove',
                 edits.music({ trackId: null, url: null, title: null, attribution: null }),
               )
             }
           >
-            إزالة الموسيقى
+            {t('remove')}
           </button>
         ) : null}
       </div>

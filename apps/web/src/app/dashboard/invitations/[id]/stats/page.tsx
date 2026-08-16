@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
 
+import { getTranslations } from 'next-intl/server';
+
 import { invitationStatsPanel } from '@zfaf/core';
 
 import { container } from '../../../../../server/container.js';
@@ -28,6 +30,7 @@ export default async function StatsPage({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<React.ReactElement> {
+  const t = await getTranslations('stats');
   const session = await requireActor();
   if (!session.authenticated) notFound();
 
@@ -46,33 +49,43 @@ export default async function StatsPage({
   const totalDevices = panel.devices.mobile + panel.devices.tablet + panel.devices.desktop;
 
   return (
-    <main className="zfd" dir="rtl" lang="ar">
+    <main className="zfd">
       <div className="zfd__bar">
-        <h1 className="zfd__title">إحصاءات الدعوة</h1>
+        <h1 className="zfd__title">{t('title')}</h1>
         <a className="zfd-btn zfd-btn--quiet" href={`/dashboard/invitations/${id}/rsvps`}>
-          الردود
+          {t('responsesLink')}
         </a>
       </div>
 
-      <section className="zfd-stats" aria-label="الأرقام">
-        <Stat label="المشاهدات" value={panel.views} testId="stat-views" />
-        <Stat label="زوار مختلفون" value={panel.uniqueVisitors} testId="stat-unique" />
-        <Stat label="الردود" value={panel.rsvp.responses} testId="stat-responses" />
-        <Stat label="عدد الحضور" value={panel.rsvp.guests} testId="stat-guests" />
+      <section className="zfd-stats" aria-label={t('numbers')}>
+        <Stat label={t('views')} value={panel.views} testId="stat-views" />
+        <Stat label={t('unique')} value={panel.uniqueVisitors} testId="stat-unique" />
+        <Stat label={t('responses')} value={panel.rsvp.responses} testId="stat-responses" />
+        <Stat label={t('guests')} value={panel.rsvp.guests} testId="stat-guests" />
       </section>
 
-      <section aria-label="الأجهزة">
-        <h2 className="zfd__title">الأجهزة</h2>
+      <section aria-label={t('devices')}>
+        <h2 className="zfd__title">{t('devices')}</h2>
         {totalDevices === 0 ? (
           <p className="zfd-empty" data-testid="devices-empty">
-            لا توجد مشاهدات بعد.
+            {t('devicesEmpty')}
           </p>
         ) : (
           <ul className="zfd-list" data-testid="device-breakdown">
-            <Device label="جوال" value={panel.devices.mobile} total={totalDevices} kind="mobile" />
-            <Device label="لوحي" value={panel.devices.tablet} total={totalDevices} kind="tablet" />
             <Device
-              label="حاسوب"
+              label={t('mobile')}
+              value={panel.devices.mobile}
+              total={totalDevices}
+              kind="mobile"
+            />
+            <Device
+              label={t('tablet')}
+              value={panel.devices.tablet}
+              total={totalDevices}
+              kind="tablet"
+            />
+            <Device
+              label={t('desktop')}
               value={panel.devices.desktop}
               total={totalDevices}
               kind="desktop"
@@ -86,12 +99,9 @@ export default async function StatsPage({
         showing through (ADR-0009); the second is the sixty-second flush
         (D8.3). Both would otherwise be discovered as "the numbers look wrong".
       */}
-      <section className="zfd-note" aria-label="ملاحظات">
-        <p>
-          لا نستخدم أي كوكيز ولا نحفظ عناوين الزوار. «زوار مختلفون» تقدير يومي: من يفتح الدعوة في
-          يومين مختلفين يُحتسب مرتين.
-        </p>
-        <p>قد تتأخر الأرقام حتى دقيقة واحدة.</p>
+      <section className="zfd-note" aria-label={t('notesLabel')}>
+        <p>{t('privacyNote')}</p>
+        <p>{t('freshnessNote')}</p>
       </section>
     </main>
   );

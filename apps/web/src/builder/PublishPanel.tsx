@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 import {
   type DraftDocument,
@@ -34,9 +35,16 @@ import {
  * "سرية" anywhere in this file.
  */
 
-/** ADR-0017's required wording. One constant, three placements. */
-export const UNLISTED_HONESTY =
-  'دعوتك غير مُدرجة — لن تظهر في نتائج البحث، لكن أي شخص يملك الرابط يستطيع فتحها ومشاركته.';
+/**
+ * ADR-0017's required wording lives in the catalogue, under one key.
+ *
+ * It used to be a constant here. A translated product cannot keep it as one —
+ * and the property that matters is not that it is a constant but that the
+ * three placements are **the same sentence**. One key read three times gives
+ * that in both languages; three keys, or a constant plus a translation, would
+ * be three chances for the honest wording to drift in one of them.
+ */
+const HONESTY_KEY = 'unlistedNotice';
 
 export interface PublishPanelProps {
   readonly invitationId: string;
@@ -66,6 +74,7 @@ export function PublishPanel({
   publishedBaseUrl,
   flush,
 }: PublishPanelProps): React.ReactElement {
+  const t = useTranslations('builder.publish');
   /**
    * The suggested address follows the names until the owner edits it.
    *
@@ -170,7 +179,7 @@ export function PublishPanel({
 
     setState({
       kind: 'error',
-      message: body.error?.message ?? 'تعذّر النشر',
+      message: body.error?.message ?? t('failed'),
       issues: body.error?.details?.issues ?? [],
     });
   }, [flush, invitationId, slug]);
@@ -179,12 +188,12 @@ export function PublishPanel({
 
   return (
     <details className="zfb-panel" data-testid="publish-panel">
-      <summary className="zfb-panel__summary">النشر</summary>
+      <summary className="zfb-panel__summary">{t('tab')}</summary>
 
       <div className="zfb-panel__body">
         {/* ── the address ────────────────────────────────────────────────── */}
         <label className="zfb-field">
-          <span className="zfb-field__label">رابط الدعوة</span>
+          <span className="zfb-field__label">{t('slug')}</span>
           <input
             className="zfb-field__input"
             data-testid="publish-slug"
@@ -201,24 +210,24 @@ export function PublishPanel({
 
         {slugState.kind === 'available' ? (
           <p className="zfb-field__hint" data-testid="slug-state">
-            الرابط متاح.
+            {t('slugAvailable')}
           </p>
         ) : null}
         {slugState.kind === 'taken' ? (
           <p className="zfb-field__hint zfb-field__hint--warn" data-testid="slug-state">
-            هذا الرابط غير متاح.
-            {slugState.suggestion ? ` جرّب: ${slugState.suggestion}` : ''}
+            {t('slugTaken')}
+            {slugState.suggestion ? t('slugSuggestion', { suggestion: slugState.suggestion }) : ''}
           </p>
         ) : null}
 
         {/* ── what publishing actually means: placement 1 of 3 ───────────── */}
         <p className="zfb-honesty" data-honesty="confirm" data-testid="honesty-confirm">
-          {UNLISTED_HONESTY}
+          {t(HONESTY_KEY)}
         </p>
 
         {!ready ? (
           <p className="zfb-field__hint zfb-field__hint--warn" data-testid="publish-blocked">
-            أكمل الحقول المطلوبة قبل النشر.
+            {t('blocked')}
           </p>
         ) : null}
 
@@ -229,7 +238,7 @@ export function PublishPanel({
           disabled={!ready || state.kind === 'publishing'}
           onClick={() => void publish()}
         >
-          {state.kind === 'publishing' ? 'جارٍ النشر…' : 'نشر الدعوة'}
+          {state.kind === 'publishing' ? t('publishing') : t('publish')}
         </button>
 
         {state.kind === 'error' ? (
@@ -242,7 +251,7 @@ export function PublishPanel({
         {state.kind === 'published' ? (
           <div className="zfb-published" data-testid="publish-success">
             <p className="zfb-field__label">
-              {state.firstPublication ? 'نُشرت دعوتك.' : 'حُدّثت الدعوة المنشورة.'}
+              {state.firstPublication ? t('published') : t('updated')}
             </p>
             <a
               className="zfb-published__link"
@@ -256,7 +265,7 @@ export function PublishPanel({
             </a>
 
             <p className="zfb-honesty" data-honesty="success" data-testid="honesty-success">
-              {UNLISTED_HONESTY}
+              {t(HONESTY_KEY)}
             </p>
 
             <div className="zfb-published__actions">
@@ -274,7 +283,7 @@ export function PublishPanel({
                 target="_blank"
                 rel="noreferrer"
               >
-                مشاركة على واتساب
+                {t('shareWhatsapp')}
               </a>
               {/* Downloads rather than previews: the point of the code is that
                   it goes onto something printed. */}
@@ -283,14 +292,14 @@ export function PublishPanel({
                 data-testid="qr-svg"
                 href={`/api/v1/invitations/${invitationId}/qr?format=svg`}
               >
-                تنزيل QR للطباعة
+                {t('downloadQrPrint')}
               </a>
               <a
                 className="zfb-btn"
                 data-testid="qr-png"
                 href={`/api/v1/invitations/${invitationId}/qr?format=png&size=1024`}
               >
-                تنزيل QR للمشاركة
+                {t('downloadQrShare')}
               </a>
             </div>
           </div>
@@ -305,10 +314,10 @@ export function PublishPanel({
               checked={indexed}
               onChange={(event) => setIndexed(event.target.checked)}
             />
-            <span>السماح لمحركات البحث بفهرسة الدعوة</span>
+            <span>{t('indexable')}</span>
           </label>
           <p className="zfb-honesty" data-honesty="settings" data-testid="honesty-settings">
-            {UNLISTED_HONESTY}
+            {t(HONESTY_KEY)}
           </p>
         </div>
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 import { type DraftDocument, applyPatch, parseDraftDocument, toPreviewSnapshot } from '@zfaf/core';
 import { InvitationRenderer } from '@zfaf/invitation-renderer';
@@ -35,6 +36,7 @@ export function PreviewFrame({
   initialDocument,
   previewedAt,
 }: PreviewFrameProps): React.ReactElement {
+  const t = useTranslations('builder.preview');
   /**
    * The builder and the preview are the same origin by construction, so our
    * own origin *is* the expected parent's.
@@ -121,7 +123,7 @@ export function PreviewFrame({
   if (!projected) {
     return (
       <div className="zf-preview-empty" role="status">
-        لا يمكن عرض المعاينة الآن
+        {t('unavailable')}
       </div>
     );
   }

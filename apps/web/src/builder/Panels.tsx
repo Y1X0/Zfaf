@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactElement } from 'react';
+import { useTranslations } from 'next-intl';
 
 import { type DraftDocument, FONT_KEYS, checkThemeContrast, enabledSections } from '@zfaf/core';
 
@@ -26,47 +27,60 @@ export interface PanelProps {
  * Most people want "something beautiful", not a hue slider. Putting the
  * pickers first makes the common case the hard one (docs/06 §6).
  */
+/**
+ * Palette ids map to message keys, not to words.
+ *
+ * The id is what a preset is identified by everywhere else in the product; the
+ * key is derived from it once, here, so adding a palette means adding a colour
+ * set and two translations rather than remembering a third mapping table.
+ */
+const PALETTE_KEYS: Readonly<Record<string, string>> = {
+  'classic-gold': 'classicGold',
+  'royal-night': 'midnight',
+  blush: 'dustyRose',
+  sage: 'sageGreen',
+  ink: 'ink',
+  terracotta: 'terracotta',
+};
+
 export const PALETTES = [
   {
     id: 'classic-gold',
-    label: 'ذهبي كلاسيكي',
     colors: { primary: '#8a6d24', accent: '#d9c89a', secondary: '#2f2a24' },
   },
   {
     id: 'royal-night',
-    label: 'ليلي فخم',
     colors: { primary: '#c9a227', accent: '#6b5a2a', secondary: '#0e0e0e' },
   },
   {
     id: 'blush',
-    label: 'وردي هادئ',
     colors: { primary: '#a8586b', accent: '#e8ccd2', secondary: '#3a2b2f' },
   },
   {
     id: 'sage',
-    label: 'أخضر مريمية',
     colors: { primary: '#4f6b52', accent: '#cdd9c8', secondary: '#26302a' },
   },
   {
     id: 'ink',
-    label: 'حبري بسيط',
     colors: { primary: '#1f2937', accent: '#cbd5e1', secondary: '#0f172a' },
   },
   {
     id: 'terracotta',
-    label: 'طيني دافئ',
     colors: { primary: '#9c5b3c', accent: '#e6c6b1', secondary: '#3b2a22' },
   },
 ] as const;
 
-const MOTION_LEVELS = [
-  { value: 'none', label: 'بلا' },
-  { value: 'subtle', label: 'خفيفة' },
-  { value: 'moderate', label: 'متوسطة' },
-  { value: 'rich', label: 'غنية' },
-] as const;
+/**
+ * Motion levels, as values only.
+ *
+ * The stored value never changes; the word beside it is looked up per render,
+ * so a document written in Arabic reads correctly to an English collaborator
+ * without either of them touching the document.
+ */
+const MOTION_LEVELS = ['none', 'subtle', 'moderate', 'rich'] as const;
 
 export function DesignPanel({ document, builder }: PanelProps): ReactElement {
+  const t = useTranslations('builder.design');
   const warnings = checkThemeContrast(document.theme);
   const activePalette = PALETTES.find(
     (palette) => palette.colors.primary === document.theme.colors.primary,
@@ -75,12 +89,12 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
   return (
     <section className="zfb-panel" aria-labelledby="zfb-design-heading" data-testid="design-panel">
       <h2 className="zfb-panel__summary" id="zfb-design-heading">
-        التصميم
+        {t('panelTitle')}
       </h2>
       <div className="zfb-panel__body">
         <div className="zfb-field">
-          <span className="zfb-field__label">مجموعات جاهزة</span>
-          <div className="zfb-swatches" role="group" aria-label="مجموعات ألوان جاهزة">
+          <span className="zfb-field__label">{t('presets')}</span>
+          <div className="zfb-swatches" role="group" aria-label={t('paletteGroup')}>
             {PALETTES.map((palette) => (
               <button
                 key={palette.id}
@@ -88,14 +102,14 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
                 className="zfb-swatch"
                 data-testid={`palette-${palette.id}`}
                 aria-pressed={activePalette?.id === palette.id}
-                onClick={() => builder.edit('مجموعة ألوان', edits.themePalette(palette.colors))}
+                onClick={() => builder.edit('theme.palette', edits.themePalette(palette.colors))}
               >
                 <span className="zfb-swatch__chips" aria-hidden="true">
                   {Object.values(palette.colors).map((color) => (
                     <span key={color} className="zfb-swatch__chip" style={{ background: color }} />
                   ))}
                 </span>
-                {palette.label}
+                {t(`palettes.${PALETTE_KEYS[palette.id] ?? 'ink'}`)}
               </button>
             ))}
           </div>
@@ -104,7 +118,7 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
         <div className="zfb-row">
           <div className="zfb-field">
             <label className="zfb-field__label" htmlFor="zfb-color-primary">
-              اللون الأساسي
+              {t('primary')}
             </label>
             <input
               id="zfb-color-primary"
@@ -114,7 +128,7 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
               value={document.theme.colors.primary}
               onChange={(event) =>
                 builder.edit(
-                  'اللون الأساسي',
+                  'theme.primary',
                   edits.themeColor({ key: 'primary', color: event.target.value }),
                 )
               }
@@ -122,7 +136,7 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
           </div>
           <div className="zfb-field">
             <label className="zfb-field__label" htmlFor="zfb-color-accent">
-              اللون المميز
+              {t('accent')}
             </label>
             <input
               id="zfb-color-accent"
@@ -131,7 +145,7 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
               value={document.theme.colors.accent}
               onChange={(event) =>
                 builder.edit(
-                  'اللون المميز',
+                  'theme.accent',
                   edits.themeColor({ key: 'accent', color: event.target.value }),
                 )
               }
@@ -143,14 +157,14 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
           // Shown the moment a colour is chosen rather than at publish time,
           // when changing it means going back through the whole flow.
           <p className="zfb-contrast-warning" role="status" data-testid="contrast-warning">
-            هذا التباين سيصعّب القراءة على بعض الضيوف. جرّب لوناً أغمق أو أفتح.
+            {t('contrastWarning')}
           </p>
         ) : null}
 
         <div className="zfb-row">
           <div className="zfb-field">
             <label className="zfb-field__label" htmlFor="zfb-font-display">
-              خط العناوين
+              {t('headingFont')}
             </label>
             <select
               id="zfb-font-display"
@@ -159,7 +173,7 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
               value={document.theme.typography.displayFont}
               onChange={(event) =>
                 builder.edit(
-                  'خط العناوين',
+                  'theme.headingFont',
                   edits.themeFont({ key: 'displayFont', font: event.target.value }),
                 )
               }
@@ -173,7 +187,7 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
           </div>
           <div className="zfb-field">
             <label className="zfb-field__label" htmlFor="zfb-font-body">
-              خط النص
+              {t('bodyFont')}
             </label>
             <select
               id="zfb-font-body"
@@ -181,7 +195,7 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
               value={document.theme.typography.bodyFont}
               onChange={(event) =>
                 builder.edit(
-                  'خط النص',
+                  'theme.bodyFont',
                   edits.themeFont({ key: 'bodyFont', font: event.target.value }),
                 )
               }
@@ -196,36 +210,36 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
         </div>
 
         <fieldset className="zfb-field">
-          <legend className="zfb-field__label">شدّة الحركة</legend>
+          <legend className="zfb-field__label">{t('motionLevel')}</legend>
           <div className="zfb-swatches">
             {MOTION_LEVELS.map((level) => (
               <button
-                key={level.value}
+                key={level}
                 type="button"
                 className="zfb-swatch"
-                data-testid={`motion-${level.value}`}
-                aria-pressed={document.theme.motion.intensity === level.value}
-                onClick={() => builder.edit('الحركة', edits.themeMotion(level.value))}
+                data-testid={`motion-${level}`}
+                aria-pressed={document.theme.motion.intensity === level}
+                onClick={() => builder.edit('theme.motion', edits.themeMotion(level))}
               >
-                {level.label}
+                {t(`scale.${level}`)}
               </button>
             ))}
           </div>
         </fieldset>
 
         <details className="zfb-panel">
-          <summary className="zfb-panel__summary">خيارات متقدمة</summary>
+          <summary className="zfb-panel__summary">{t('advanced')}</summary>
           <div className="zfb-panel__body zfb-row">
             <div className="zfb-field">
               <label className="zfb-field__label" htmlFor="zfb-spacing">
-                التباعد
+                {t('spacing')}
               </label>
               <select
                 id="zfb-spacing"
                 className="zfb-field__select"
                 value={document.theme.spacing}
                 onChange={(event) =>
-                  builder.edit('التباعد', edits.themeSpacing(event.target.value))
+                  builder.edit('theme.spacing', edits.themeSpacing(event.target.value))
                 }
               >
                 {['tight', 'normal', 'airy'].map((value) => (
@@ -237,13 +251,15 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
             </div>
             <div className="zfb-field">
               <label className="zfb-field__label" htmlFor="zfb-radius">
-                الزوايا
+                {t('corners')}
               </label>
               <select
                 id="zfb-radius"
                 className="zfb-field__select"
                 value={document.theme.radius}
-                onChange={(event) => builder.edit('الزوايا', edits.themeRadius(event.target.value))}
+                onChange={(event) =>
+                  builder.edit('theme.radius', edits.themeRadius(event.target.value))
+                }
               >
                 {['sharp', 'soft', 'round', 'pill'].map((value) => (
                   <option key={value} value={value}>
@@ -261,20 +277,6 @@ export function DesignPanel({ document, builder }: PanelProps): ReactElement {
 
 // ── sections ───────────────────────────────────────────────────────────────
 
-const SECTION_LABELS: Readonly<Record<string, string>> = {
-  hero: 'الافتتاحية',
-  couple: 'العروسان',
-  countdown: 'العد التنازلي',
-  events: 'برنامج الحفل',
-  location: 'الموقع',
-  gallery: 'المعرض',
-  story: 'قصتنا',
-  rsvp: 'تأكيد الحضور',
-  message: 'رسالة',
-  music: 'الموسيقى',
-  footer: 'الخاتمة',
-};
-
 /** Types an invitation cannot open or close without. */
 const LOCKED_TYPES = new Set(['hero', 'footer']);
 
@@ -288,6 +290,7 @@ const LOCKED_TYPES = new Set(['hero', 'footer']);
  * behind it (docs/06 §7).
  */
 export function SectionsPanel({ document, builder }: PanelProps): ReactElement {
+  const t = useTranslations('builder.sections');
   // Sorted by `order` so the list matches the invitation, not the array.
   const ordered = [...document.sections].sort((a, b) => a.order - b.order);
 
@@ -296,7 +299,7 @@ export function SectionsPanel({ document, builder }: PanelProps): ReactElement {
     const current = ordered[position];
     if (!target || !current) return;
 
-    builder.edit('ترتيب الأقسام', [
+    builder.edit('sections.order', [
       {
         op: 'replace',
         path: `/sections/${document.sections.indexOf(current)}/order`,
@@ -319,13 +322,20 @@ export function SectionsPanel({ document, builder }: PanelProps): ReactElement {
       data-testid="sections-panel"
     >
       <h2 className="zfb-panel__summary" id="zfb-sections-heading">
-        الأقسام
+        {t('panelTitle')}
       </h2>
       <div className="zfb-panel__body">
         <ul className="zfb-sections">
           {ordered.map((section, position) => {
             const locked = LOCKED_TYPES.has(section.type);
-            const label = SECTION_LABELS[section.type] ?? section.type;
+            /**
+             * The section's own type is the message key.
+             *
+             * A type with no translation falls back to the type itself rather
+             * than to an empty button — an untranslated word is a bug worth
+             * seeing, a blank control is a bug nobody can report.
+             */
+            const label = t.has(section.type) ? t(section.type) : section.type;
             const index = document.sections.indexOf(section);
 
             return (
@@ -342,7 +352,7 @@ export function SectionsPanel({ document, builder }: PanelProps): ReactElement {
                   data-testid={`section-up-${section.id}`}
                   onClick={() => move(position, -1)}
                   disabled={position === 0}
-                  aria-label={`نقل ${label} للأعلى`}
+                  aria-label={t('moveUp', { name: label })}
                 >
                   ↑
                 </button>
@@ -352,13 +362,13 @@ export function SectionsPanel({ document, builder }: PanelProps): ReactElement {
                   data-testid={`section-down-${section.id}`}
                   onClick={() => move(position, 1)}
                   disabled={position === ordered.length - 1}
-                  aria-label={`نقل ${label} للأسفل`}
+                  aria-label={t('moveDown', { name: label })}
                 >
                   ↓
                 </button>
 
                 {locked ? (
-                  <span className="zfb-sections__locked">مقفل</span>
+                  <span className="zfb-sections__locked">{t('locked')}</span>
                 ) : (
                   <button
                     type="button"
@@ -367,11 +377,13 @@ export function SectionsPanel({ document, builder }: PanelProps): ReactElement {
                     aria-pressed={section.enabled}
                     onClick={() =>
                       builder.edit(
-                        section.enabled ? `إخفاء ${label}` : `إظهار ${label}`,
+                        section.enabled ? 'sections.hide' : 'sections.show',
                         edits.sectionEnabled({ index, enabled: !section.enabled }),
                       )
                     }
-                    aria-label={section.enabled ? `إخفاء ${label}` : `إظهار ${label}`}
+                    aria-label={
+                      section.enabled ? t('hide', { name: label }) : t('show', { name: label })
+                    }
                   >
                     {section.enabled ? '👁' : '🚫'}
                   </button>
@@ -381,7 +393,7 @@ export function SectionsPanel({ document, builder }: PanelProps): ReactElement {
           })}
         </ul>
         <p className="zfb-field__hint">
-          الأقسام الظاهرة الآن: {visible.size} من {document.sections.length}
+          {t('visibleCount', { visible: visible.size, total: document.sections.length })}
         </p>
       </div>
     </section>

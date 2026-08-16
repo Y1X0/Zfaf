@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 /**
  * The couple's list of replies (D7.5).
@@ -44,6 +45,7 @@ export function RsvpDashboard({
   invitationId: string;
   title: string;
 }): React.ReactElement {
+  const t = useTranslations('rsvpDashboard');
   const [rows, setRows] = useState<readonly RsvpRow[]>([]);
   const [stats, setStats] = useState<RsvpStats | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
@@ -70,7 +72,7 @@ export function RsvpDashboard({
         ]);
 
         if (!listResponse.ok) {
-          setError('تعذّر تحميل الردود.');
+          setError(t('failed'));
           return;
         }
 
@@ -83,7 +85,7 @@ export function RsvpDashboard({
         }
       } catch (cause) {
         // An aborted request is this component doing its job, not a failure.
-        if (!signal.aborted) setError('تعذّر الاتصال. أعد المحاولة.');
+        if (!signal.aborted) setError(t('networkFailed'));
         void cause;
       } finally {
         if (!signal.aborted) setLoading(false);
@@ -125,36 +127,36 @@ export function RsvpDashboard({
           data-testid="rsvp-export"
           href={`/api/v1/invitations/${invitationId}/rsvps/export`}
         >
-          تصدير CSV
+          {t('export')}
         </a>
       </header>
 
-      <section className="zfd-stats" aria-label="ملخص الردود" data-testid="rsvp-stats">
-        <Stat label="الردود" value={stats?.responses ?? 0} testId="stat-responses" />
-        <Stat label="سيحضرون" value={stats?.attending ?? 0} testId="stat-attending" />
-        <Stat label="اعتذروا" value={stats?.declined ?? 0} testId="stat-declined" />
-        <Stat label="إجمالي الأشخاص" value={stats?.guests ?? 0} testId="stat-guests" />
+      <section className="zfd-stats" aria-label={t('summary')} data-testid="rsvp-stats">
+        <Stat label={t('stats.responses')} value={stats?.responses ?? 0} testId="stat-responses" />
+        <Stat label={t('stats.attending')} value={stats?.attending ?? 0} testId="stat-attending" />
+        <Stat label={t('stats.declined')} value={stats?.declined ?? 0} testId="stat-declined" />
+        <Stat label={t('stats.guests')} value={stats?.guests ?? 0} testId="stat-guests" />
       </section>
 
       <div className="zfd-controls">
         <label className="zfd-field">
-          <span className="zfd-field__label">بحث</span>
+          <span className="zfd-field__label">{t('search')}</span>
           <input
             className="zfd-field__input"
             type="search"
             data-testid="rsvp-search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="اسم أو رقم"
+            placeholder={t('searchPlaceholder')}
           />
         </label>
 
-        <div className="zfd-filters" role="group" aria-label="تصفية">
+        <div className="zfd-filters" role="group" aria-label={t('filterGroup')}>
           {(
             [
-              ['all', 'الكل'],
-              ['attending', 'سيحضرون'],
-              ['declined', 'اعتذروا'],
+              ['all', t('filters.all')],
+              ['attending', t('filters.attending')],
+              ['declined', t('filters.declined')],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -179,7 +181,7 @@ export function RsvpDashboard({
 
       {!error && !loading && rows.length === 0 ? (
         <p className="zfd-empty" data-testid="rsvp-empty">
-          لا توجد ردود بعد.
+          {t('empty')}
         </p>
       ) : null}
 
@@ -191,7 +193,9 @@ export function RsvpDashboard({
                   the one value on this page that an outsider controls. */}
               <span className="zfd-row__name">{row.name}</span>
               <span className="zfd-row__meta">
-                {row.attending ? `سيحضر · ${row.partySize}` : 'اعتذر'}
+                {row.attending
+                  ? t('attendingWithParty', { count: row.partySize })
+                  : t('declinedLabel')}
               </span>
             </div>
             {row.phone ? (
@@ -205,9 +209,9 @@ export function RsvpDashboard({
               className="zfd-btn zfd-btn--quiet"
               data-testid="rsvp-delete"
               onClick={() => void remove(row.id)}
-              aria-label={`حذف رد ${row.name}`}
+              aria-label={t('deleteNamed', { name: row.name })}
             >
-              حذف
+              {t('delete')}
             </button>
           </li>
         ))}

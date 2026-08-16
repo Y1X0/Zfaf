@@ -1,6 +1,18 @@
 import { join } from 'node:path';
 
 import type { NextConfig } from 'next';
+import createNextIntlPlugin from 'next-intl/plugin';
+
+/**
+ * Points the plugin at our request config (D9.1).
+ *
+ * The path is passed explicitly because the file lives under `src/i18n/`
+ * rather than at one of the two locations next-intl probes by default. Without
+ * it the build compiles cleanly and then fails at prerender with "couldn't
+ * find next-intl config file" — a failure that only appears once a page is
+ * actually generated.
+ */
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 /**
  * Security headers applied to every response.
@@ -92,4 +104,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

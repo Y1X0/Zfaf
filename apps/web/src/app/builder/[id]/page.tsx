@@ -4,6 +4,7 @@ import { getEnv } from '@zfaf/config';
 import { tenantScopeFor } from '@zfaf/core';
 
 import { Builder } from '../../../builder/Builder.js';
+import { IslandMessages } from '../../../i18n/island.js';
 import { container } from '../../../server/container.js';
 import { requireActor } from '../../../server/request-context.js';
 import '../../builder.css';
@@ -37,13 +38,15 @@ export default async function BuilderPage({
   if (!invitation) notFound();
 
   return (
-    <Builder
-      invitationId={invitation.id}
-      title={invitation.title}
-      initialDocument={invitation.draftDocument}
-      initialVersion={invitation.draftVersion}
-      initialSlug={invitation.slug}
-      publishedBaseUrl={getEnv().PUBLIC_BASE_URL}
-    />
+    <IslandMessages namespaces={['builder', 'common']}>
+      <Builder
+        invitationId={invitation.id}
+        title={invitation.title}
+        initialDocument={invitation.draftDocument}
+        initialVersion={invitation.draftVersion}
+        initialSlug={invitation.slug}
+        publishedBaseUrl={getEnv().PUBLIC_BASE_URL}
+      />
+    </IslandMessages>
   );
 }

@@ -1,0 +1,345 @@
+/**
+ * The shared shell: typography, the marketing surface, and the legal pages
+ * (D9.2, D9.3, D9.6).
+ *
+ * Logical properties only, everywhere, with no `[dir="rtl"]` overrides — the
+ * document says which way it reads and the layout follows (ADR-0011 §3). The
+ * custom ESLint rule fails CI on a physical property, so this is enforced
+ * rather than intended.
+ */
+
+@font-face {
+  font-family: 'Zfaf Arabic';
+  /*
+   * Self-hosted and subset (D9.3). No Google Fonts: a third-party font host is
+   * a request to somebody else's server on every page load, a privacy leak on
+   * a page we promise sets no cookies, and a render-blocking dependency on a
+   * domain we do not control.
+   */
+  src: url('/fonts/zfaf-arabic.woff2') format('woff2');
+  /*
+   * One weight, declared honestly.
+   *
+   * Only the regular cut is licensed and vendored, and claiming a `400 700`
+   * range for a file that contains one weight would be a lie the browser acts
+   * on. Declaring 400 alone means a bold heading is synthesised from this face
+   * rather than falling back to a different typeface mid-page — which is the
+   * failure that would actually be visible.
+   */
+  font-weight: 400;
+  font-style: normal;
+  /*
+   * `swap`, deliberately. The alternative — `block` — shows nothing at all for
+   * up to three seconds on a slow connection, and a wedding invitation that is
+   * blank while a font arrives has failed at the one thing it does.
+   */
+  font-display: swap;
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF, U+0020-007E, U+00A0-00FF,
+    U+2000-206F, U+2190-21FF, U+2500-25FF;
+}
+
+:root {
+  --zf-bg: #faf7f2;
+  --zf-surface: #ffffff;
+  --zf-border: #e4ded4;
+  --zf-text: #221f1b;
+  --zf-muted: #5d5347;
+  --zf-accent: #7a5f1c;
+  --zf-radius: 12px;
+  --zf-tap: 44px;
+  --zf-measure: 68ch;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--zf-bg);
+  color: var(--zf-text);
+  font-family:
+    'Zfaf Arabic',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  /*
+   * Arabic typography (ADR-0011 §4). Three rules, and the third is not a
+   * preference:
+   *
+   *   • 16px floor on a phone — below it, the dots that distinguish ب ت ث
+   *     stop being separable at arm's length.
+   *   • 1.9 line height rather than the 1.5 a Latin face wants: Arabic
+   *     ascenders, descenders and diacritics all occupy vertical space at once.
+   *   • `letter-spacing: 0`, always. Any other value pulls the letters of a
+   *     word apart and **breaks the cursive joins** — the word stops being a
+   *     word. This is why the value is written out rather than left to a reset.
+   */
+  font-size: 1rem;
+  line-height: 1.9;
+  letter-spacing: 0;
+  font-feature-settings:
+    'liga' 1,
+    'calt' 1;
+  -webkit-text-size-adjust: 100%;
+}
+
+/*
+ * English reads comfortably tighter than Arabic, and inheriting Arabic metrics
+ * makes an English page look loose and unfinished. This is the only place
+ * language changes typography, and it keys on `lang` rather than on `dir`,
+ * because the two are not the same question.
+ */
+html[lang='en'] body {
+  line-height: 1.65;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.4;
+  letter-spacing: 0;
+  margin-block: 0 0.75rem;
+}
+
+p {
+  margin-block: 0 1rem;
+  max-inline-size: var(--zf-measure);
+}
+
+a {
+  color: var(--zf-accent);
+}
+
+/* Focus is visible everywhere, and never removed. A keyboard user who cannot
+   see where they are cannot use the page at all (WCAG 2.4.7). */
+:focus-visible {
+  outline: 3px solid var(--zf-accent);
+  outline-offset: 2px;
+}
+
+.zf-skip {
+  position: absolute;
+  inset-block-start: -100vh;
+  inset-inline-start: 0;
+  padding: 0.75rem 1rem;
+  background: var(--zf-surface);
+  color: var(--zf-text);
+  z-index: 100;
+}
+
+.zf-skip:focus {
+  inset-block-start: 0;
+}
+
+/* ── the shell ───────────────────────────────────────────────────────────── */
+
+.zf-site {
+  min-block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.zf-header,
+.zf-footer {
+  padding: 1rem;
+  background: var(--zf-surface);
+  border-block-end: 1px solid var(--zf-border);
+}
+
+.zf-footer {
+  border-block-end: 0;
+  border-block-start: 1px solid var(--zf-border);
+  margin-block-start: auto;
+  color: var(--zf-muted);
+  /*
+   * 1rem, not 0.9. A footer is where "it's only secondary text" quietly puts
+   * Arabic at 14.4px — below the 16px floor at which the dots separating ب ت ث
+   * stay apart at arm's length (ADR-0011 §4). Secondary is expressed by colour
+   * here, not by size.
+   */
+  font-size: 1rem;
+}
+
+.zf-header__inner,
+.zf-footer__inner {
+  max-inline-size: 72rem;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.zf-brand {
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-decoration: none;
+  color: var(--zf-text);
+  min-block-size: var(--zf-tap);
+  display: inline-flex;
+  align-items: center;
+}
+
+.zf-nav {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.zf-nav a {
+  min-block-size: var(--zf-tap);
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 0.6rem;
+  border-radius: var(--zf-radius);
+  text-decoration: none;
+}
+
+.zf-main {
+  padding: 1.5rem 1rem 3rem;
+}
+
+.zf-container {
+  max-inline-size: 72rem;
+  margin-inline: auto;
+}
+
+.zf-prose {
+  max-inline-size: var(--zf-measure);
+  margin-inline: auto;
+}
+
+/* ── the marketing surface ───────────────────────────────────────────────── */
+
+.zf-hero {
+  padding-block: 2.5rem 2rem;
+  text-align: center;
+}
+
+.zf-hero h1 {
+  font-size: clamp(1.7rem, 5vw, 2.6rem);
+}
+
+.zf-hero p {
+  margin-inline: auto;
+  color: var(--zf-muted);
+  font-size: 1.05rem;
+}
+
+.zf-cta {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-block-start: 1.5rem;
+}
+
+.zf-btn {
+  display: inline-grid;
+  place-items: center;
+  min-block-size: var(--zf-tap);
+  min-inline-size: var(--zf-tap);
+  padding-inline: 1.4rem;
+  border: 1px solid var(--zf-accent);
+  border-radius: 999px;
+  background: var(--zf-accent);
+  /* 8.2:1 against the accent, comfortably past WCAG AA. */
+  color: #ffffff;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.zf-btn--quiet {
+  background: transparent;
+  color: var(--zf-accent);
+}
+
+.zf-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+  margin-block: 2rem;
+}
+
+@media (min-width: 44rem) {
+  .zf-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.zf-card {
+  padding: 1.25rem;
+  background: var(--zf-surface);
+  border: 1px solid var(--zf-border);
+  border-radius: var(--zf-radius);
+}
+
+.zf-card h3 {
+  margin-block-start: 0;
+}
+
+.zf-card p {
+  margin-block-end: 0;
+  color: var(--zf-muted);
+}
+
+/* ── legal and FAQ ───────────────────────────────────────────────────────── */
+
+.zf-legal h2 {
+  margin-block-start: 2rem;
+  font-size: 1.15rem;
+}
+
+.zf-legal__updated {
+  color: var(--zf-muted);
+}
+
+.zf-faq details {
+  padding: 1rem;
+  background: var(--zf-surface);
+  border: 1px solid var(--zf-border);
+  border-radius: var(--zf-radius);
+  margin-block-end: 0.75rem;
+}
+
+.zf-faq summary {
+  min-block-size: var(--zf-tap);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.zf-faq p {
+  margin-block-end: 0;
+  color: var(--zf-muted);
+}
+
+/* ── error pages ─────────────────────────────────────────────────────────── */
+
+.zf-error {
+  min-block-size: 70dvh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.zf-error p {
+  color: var(--zf-muted);
+  margin-inline: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

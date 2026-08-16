@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { can, tenantScopeFor } from '@zfaf/core';
 
 import { RsvpDashboard } from '../../../../../dashboard/RsvpDashboard.js';
+import { IslandMessages } from '../../../../../i18n/island.js';
 import { container } from '../../../../../server/container.js';
 import { requireActor } from '../../../../../server/request-context.js';
 import '../../../../dashboard.css';
@@ -48,5 +49,9 @@ export default async function RsvpsPage({
   // data is not staff-readable however senior the account (docs/09 §3.4).
   if (!allowed.allowed) notFound();
 
-  return <RsvpDashboard invitationId={invitation.id} title={invitation.title} />;
+  return (
+    <IslandMessages namespaces={['rsvpDashboard', 'common']}>
+      <RsvpDashboard invitationId={invitation.id} title={invitation.title} />
+    </IslandMessages>
+  );
 }

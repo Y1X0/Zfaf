@@ -1,0 +1,399 @@
+{
+  "common": {
+    "brand": "Zfaf",
+    "tagline": "Digital wedding invitations",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "search": "Search",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "none": "None",
+    "languageSwitch": "العربية",
+    "skipToContent": "Skip to content"
+  },
+  "nav": {
+    "home": "Home",
+    "templates": "Templates",
+    "pricing": "Pricing",
+    "faq": "FAQ",
+    "terms": "Terms",
+    "privacy": "Privacy",
+    "dashboard": "Dashboard"
+  },
+  "marketing": {
+    "hero": {
+      "title": "Your wedding invitation, in one link",
+      "subtitle": "Design an invitation that opens on any phone in seconds, send it on WhatsApp, and see who is coming.",
+      "cta": "Get started",
+      "secondary": "See the templates"
+    },
+    "features": {
+      "title": "Why Zfaf",
+      "fast": {
+        "title": "Opens instantly",
+        "body": "The invitation is a light page that opens on a weak connection and an old phone. Nothing to install, nothing to wait for."
+      },
+      "arabic": {
+        "title": "Arabic first",
+        "body": "Direction, typography and the calendar are Arabic from the ground up — not a translation added afterwards."
+      },
+      "rsvp": {
+        "title": "Replies built in",
+        "body": "Guests reply without an account and without an app. You see the count and export it to Excel."
+      },
+      "privacy": {
+        "title": "No tracking",
+        "body": "We set no cookies on your invitation and store no guest IP addresses. You learn how many opened it, not who they are."
+      }
+    },
+    "templates": {
+      "title": "Templates",
+      "subtitle": "Every template is designed for Arabic first, and for the phone before anything else.",
+      "empty": "Templates are on the way."
+    },
+    "pricing": {
+      "title": "Pricing",
+      "subtitle": "Pay once per invitation. No monthly subscription and no automatic renewal.",
+      "note": "Prices are shown in your market's currency and include the tax that applies there.",
+      "comingSoon": "Plans and prices will be announced before launch."
+    },
+    "faq": {
+      "title": "Frequently asked questions",
+      "q1": {
+        "q": "Do my guests need an app?",
+        "a": "No. The invitation is a link that opens in any browser, and a guest replies on the invitation itself without an account."
+      },
+      "q2": {
+        "q": "Can I edit the invitation after sending it?",
+        "a": "Yes. Every publish saves a complete copy, so your edits stay invisible to guests until you publish them — and you can return to any earlier version."
+      },
+      "q3": {
+        "q": "Who can see my invitation?",
+        "a": "Your invitation is not listed in search engines by default. But anyone holding the link can open it and pass it on — a link is not a password."
+      },
+      "q4": {
+        "q": "What happens to my guests' details?",
+        "a": "The names and numbers of people who reply belong to you alone. Our staff cannot read them, and we do not use them for anything else."
+      },
+      "q5": {
+        "q": "How long does the invitation stay up?",
+        "a": "For a while after the wedding, then it closes automatically. The link says so plainly rather than looking broken."
+      }
+    }
+  },
+  "legal": {
+    "updated": "Last updated: {date}",
+    "terms": {
+      "title": "Terms of use",
+      "intro": "These terms govern your use of Zfaf. By using the platform you agree to them.",
+      "s1": {
+        "title": "Your account",
+        "body": "You are responsible for the accuracy of your account details and for protecting your password. Tell us immediately if you suspect unauthorised access."
+      },
+      "s2": {
+        "title": "What you upload",
+        "body": "The photographs and text you upload remain yours. You give us a limited permission to display them inside your invitation only, and we use them for nothing else. You confirm you have the right to use them."
+      },
+      "s3": {
+        "title": "What is not allowed",
+        "body": "Impersonating someone, publishing content that infringes others' rights, or using the platform to harass people. We may suspend an invitation that does, and we record the reason."
+      },
+      "s4": {
+        "title": "Music",
+        "body": "The available tracks are licensed for use inside invitations. Uploading your own is not offered, because we cannot verify its rights."
+      },
+      "s5": {
+        "title": "Availability",
+        "body": "We do what we can to keep invitations reachable, but we do not guarantee uninterrupted service. We are not liable for indirect losses."
+      },
+      "s6": {
+        "title": "Changes",
+        "body": "We may update these terms. Material changes are emailed to you before they take effect."
+      }
+    },
+    "privacy": {
+      "title": "Privacy policy",
+      "intro": "This policy explains what we collect and what we do not. It is written to be read, not signed.",
+      "s1": {
+        "title": "Your account data",
+        "body": "Your email, your name, and what you write in your invitation. We use them to run the service and to contact you about it, and we sell them to nobody."
+      },
+      "s2": {
+        "title": "Your guests",
+        "body": "Someone who replies gives us their name, and possibly a number and a note. That data is yours: it appears in your dashboard, and you can export and delete it. Platform staff cannot read it — that is enforced in the system itself, not merely stated in a policy."
+      },
+      "s3": {
+        "title": "Analytics",
+        "body": "We count views with no cookies and store no IP address. A visitor is represented by a hash derived from a daily key that is never persisted and expires within a day — so once the day is over, nobody, ourselves included, can link a visit to a person or link two visits together."
+      },
+      "s4": {
+        "title": "Cookies",
+        "body": "The public invitation page sets no cookies at all. The dashboard uses one session cookie, which is necessary to keep you signed in, and nothing else."
+      },
+      "s5": {
+        "title": "Who we share with",
+        "body": "The hosting, storage and email providers the service runs on, to the minimum extent needed. No advertisers and no data brokers."
+      },
+      "s6": {
+        "title": "Your rights",
+        "body": "You can request a copy of your data or delete your account. Deletion removes your invitations and your guests' replies after a grace period."
+      },
+      "s7": {
+        "title": "Contact",
+        "body": "For any privacy question, write to <email>privacy@zfaf.app</email>."
+      }
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page not found",
+      "body": "The link may be out of date, or typed slightly differently.",
+      "action": "Back to the home page"
+    },
+    "gone": {
+      "title": "This invitation has ended",
+      "body": "The wedding has passed and the invitation is closed. You did not get the link wrong."
+    },
+    "blocked": {
+      "title": "This invitation was suspended",
+      "body": "We suspended this invitation after a review. If it is yours, get in touch."
+    },
+    "server": {
+      "title": "Something went wrong on our side",
+      "body": "This is our problem, not yours. Please try again shortly.",
+      "action": "Try again"
+    }
+  },
+  "builder": {
+    "steps": {
+      "couple": "The couple",
+      "date": "Date",
+      "location": "Venue",
+      "events": "Programme",
+      "photos": "Photos",
+      "music": "Music"
+    },
+    "couple": {
+      "groomName": "Groom's name",
+      "brideName": "Bride's name",
+      "message": "Invitation message",
+      "messageHint": "Shown below the names. Leave it empty to hide it.",
+      "more": "More options",
+      "shortName": "Short name",
+      "shortNameHint": "Used by templates that show a short name, such as \"A & S\"."
+    },
+    "date": {
+      "weddingDate": "Wedding date",
+      "startTime": "Start time",
+      "endTime": "End time",
+      "timezone": "Time zone",
+      "timezoneHint": "Guests see the wedding's time, not their own device's.",
+      "timezoneAt": "The wedding is at {time} in {zone}",
+      "deviceZone": "(your device)"
+    },
+    "location": {
+      "venueName": "Venue name",
+      "address": "Address",
+      "mapsUrl": "Map link",
+      "mapsUrlHint": "Paste the link from your maps app; we read the coordinates from it.",
+      "advanced": "Enter coordinates manually",
+      "latitude": "Latitude",
+      "longitude": "Longitude"
+    },
+    "events": {
+      "hint": "Leave this empty if the wedding is a single event — the section will not appear.",
+      "item": "Event {number}",
+      "title": "Title",
+      "type": "Type",
+      "date": "Date",
+      "remove": "Remove this event",
+      "add": "+ Add an event",
+      "types": {
+        "contract": "Contract signing",
+        "reception": "Reception",
+        "wedding": "Wedding",
+        "dinner": "Dinner",
+        "custom": "Other"
+      }
+    },
+    "photos": {
+      "hint": "No photographs? The gallery simply will not appear — nothing to do.",
+      "cover": "Cover photograph",
+      "noCover": "No cover photograph.",
+      "removeCover": "Remove the cover photograph",
+      "gallery": "Gallery ({count})",
+      "image": "Photograph {number}",
+      "removeImage": "Remove photograph {number}",
+      "uploadNote": "Photographs upload straight to storage — the file never passes through our servers."
+    },
+    "music": {
+      "hint": "Tracks come from a licensed library. Uploading is not offered — see the music policy.",
+      "selected": "Selected track",
+      "none": "No music",
+      "remove": "Remove the music"
+    },
+    "design": {
+      "palette": "Colour palette",
+      "presets": "Ready-made sets",
+      "primary": "Primary colour",
+      "accent": "Accent colour",
+      "headingFont": "Heading font",
+      "bodyFont": "Body font",
+      "spacing": "Spacing",
+      "corners": "Corners",
+      "motion": "Motion",
+      "motionLevel": "Motion intensity",
+      "advanced": "Advanced options",
+      "palettes": {
+        "classicGold": "Classic gold",
+        "sageGreen": "Sage green",
+        "dustyRose": "Dusty rose",
+        "midnight": "Midnight",
+        "terracotta": "Terracotta",
+        "ink": "Ink"
+      },
+      "scale": {
+        "none": "None",
+        "subtle": "Light",
+        "moderate": "Medium",
+        "rich": "Rich"
+      },
+      "panelTitle": "Design",
+      "paletteGroup": "Ready-made colour sets",
+      "contrastWarning": "This contrast will be hard for some guests to read. Try a darker or lighter colour."
+    },
+    "sections": {
+      "order": "Section order",
+      "locked": "Locked",
+      "hero": "Opening",
+      "couple": "The couple",
+      "countdown": "Countdown",
+      "events": "Programme",
+      "gallery": "Gallery",
+      "location": "Venue",
+      "rsvp": "RSVP",
+      "story": "Our story",
+      "message": "Message",
+      "closing": "Closing",
+      "panelTitle": "Sections",
+      "moveUp": "Move {name} up",
+      "moveDown": "Move {name} down",
+      "hide": "Hide {name}",
+      "show": "Show {name}",
+      "footer": "Closing",
+      "music": "Music",
+      "visibleCount": "Sections currently shown: {visible} of {total}"
+    },
+    "publish": {
+      "title": "Publish the invitation",
+      "tab": "Publish",
+      "slug": "Invitation link",
+      "indexable": "Let search engines list this invitation",
+      "unlistedNotice": "Your invitation is unlisted — it will not appear in search results, but anyone holding the link can open it and pass it on.",
+      "publishing": "Publishing…",
+      "publish": "Publish the invitation",
+      "published": "Your invitation is published.",
+      "updated": "The published invitation has been updated.",
+      "failed": "Could not publish",
+      "slugAvailable": "This link is available.",
+      "slugTaken": "This link is not available.",
+      "slugSuggestion": " Try: {suggestion}",
+      "blocked": "Complete the required fields before publishing.",
+      "shareWhatsapp": "Share on WhatsApp",
+      "downloadQrPrint": "Download QR for print",
+      "downloadQrShare": "Download QR for sharing"
+    },
+    "status": {
+      "saving": "● Saving…",
+      "saved": "✓ Saved",
+      "failed": "⚠ Could not save",
+      "offline": "⚠ Offline — your edits are kept on this device",
+      "conflict": "⚠ Opened somewhere else"
+    },
+    "conflict": {
+      "body": "This invitation was opened somewhere else and the same fields changed there.",
+      "keepMine": "Keep my edits",
+      "keepTheirs": "Take the saved version"
+    },
+    "load": {
+      "failed": "Could not load this invitation."
+    },
+    "preview": {
+      "label": "Preview",
+      "unavailable": "The preview cannot be shown right now"
+    },
+    "network": {
+      "failed": "Could not reach the server. Try again."
+    },
+    "shell": {
+      "editTab": "Edit",
+      "previewTab": "Preview",
+      "tabsLabel": "Edit or preview",
+      "editPane": "Edit",
+      "previewPane": "Preview",
+      "stepsLabel": "Builder steps",
+      "stepComplete": "Complete",
+      "undo": "Undo",
+      "redo": "Redo",
+      "previous": "Previous",
+      "next": "Next",
+      "previewSize": "Preview size",
+      "previewTitle": "Invitation preview",
+      "missingFields": "To publish you still need {count} required field(s).",
+      "ready": "Ready to publish.",
+      "restorePrompt": "You have unsaved edits on this device from {when}. Restore them?",
+      "restoreAccept": "Restore my edits",
+      "restoreDecline": "Discard them",
+      "conflictKeepMine": "Keep my edits",
+      "conflictTakeTheirs": "Use the other version"
+    }
+  },
+  "rsvpDashboard": {
+    "title": "Replies",
+    "search": "Search",
+    "filters": {
+      "all": "All",
+      "attending": "Attending",
+      "declined": "Declined"
+    },
+    "stats": {
+      "responses": "Replies",
+      "attending": "Attending",
+      "declined": "Declined",
+      "guests": "Total guests"
+    },
+    "export": "Export CSV",
+    "empty": "No replies yet.",
+    "failed": "Could not load the replies.",
+    "delete": "Remove this reply",
+    "attendingLabel": "Attending",
+    "declinedLabel": "Declined",
+    "summary": "Reply summary",
+    "filterGroup": "Filter",
+    "searchPlaceholder": "Name or number",
+    "attendingWithParty": "Attending · {count}",
+    "deleteNamed": "Remove {name}'s reply",
+    "networkFailed": "Could not reach the server. Try again."
+  },
+  "stats": {
+    "title": "Invitation statistics",
+    "responsesLink": "Replies",
+    "numbers": "The numbers",
+    "views": "Views",
+    "unique": "Distinct visitors",
+    "responses": "Replies",
+    "guests": "Total guests",
+    "devices": "Devices",
+    "devicesEmpty": "No views yet.",
+    "mobile": "Phone",
+    "tablet": "Tablet",
+    "desktop": "Desktop",
+    "notesLabel": "Notes",
+    "privacyNote": "We use no cookies and store no visitor addresses. \"Distinct visitors\" is a daily estimate: someone who opens the invitation on two different days is counted twice.",
+    "freshnessNote": "The numbers can lag by up to a minute."
+  }
+}

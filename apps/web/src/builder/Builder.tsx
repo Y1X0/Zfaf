@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { useFormatter, useTranslations } from 'next-intl';
 
 import {
   BUILDER_STEP_DEFINITIONS,
@@ -53,25 +54,23 @@ export interface BuilderProps {
   readonly publishedBaseUrl: string;
 }
 
-const STEP_LABELS: Readonly<Record<BuilderStepId, string>> = {
-  couple: 'العروسان',
-  date: 'الموعد',
-  location: 'المكان',
-  events: 'البرنامج',
-  photos: 'الصور',
-  music: 'الموسيقى',
-};
-
 function SaveIndicator({ status }: { status: SaveStatus }): ReactElement {
-  // The words matter as much as the state: "غير متصل" alone reads as data
-  // loss, so it always says where the work actually is (docs/06 §4).
+  const t = useTranslations('builder.status');
+  /**
+   * The words matter as much as the state.
+   *
+   * "Offline" on its own reads as data loss, so the message always says where
+   * the work actually is — on this device, still safe (docs/06 §4). Both
+   * `pending` and `saving` say "saving": the distinction is real to the
+   * autosave engine and meaningless to the person watching.
+   */
   const text: Record<SaveStatus['kind'], string> = {
-    clean: '✓ تم الحفظ',
-    pending: '● جارٍ الحفظ…',
-    saving: '● جارٍ الحفظ…',
-    offline: '⚠ غير متصل — تعديلاتك محفوظة على جهازك',
-    failed: '⚠ تعذّر الحفظ',
-    conflict: '⚠ فُتحت في مكان آخر',
+    clean: t('saved'),
+    pending: t('saving'),
+    saving: t('saving'),
+    offline: t('offline'),
+    failed: t('failed'),
+    conflict: t('conflict'),
   };
 
   return (
@@ -96,6 +95,8 @@ export function Builder({
   initialSlug,
   publishedBaseUrl,
 }: BuilderProps): ReactElement {
+  const t = useTranslations('builder');
+  const formatter = useFormatter();
   const builder = useBuilder({ invitationId, initialDocument, initialVersion });
   const [step, setStep] = useState<BuilderStepId>('couple');
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
@@ -172,7 +173,7 @@ export function Builder({
   }, [builder]);
 
   if (!builder.document) {
-    return <p className="zfb-preview-empty">تعذّر تحميل هذه الدعوة.</p>;
+    return <p className="zfb-preview-empty">{t('load.failed')}</p>;
   }
 
   const document = builder.document;
@@ -207,7 +208,7 @@ export function Builder({
             data-testid="undo"
             onClick={builder.undo}
             disabled={!builder.canUndo}
-            aria-label="تراجع"
+            aria-label={t('shell.undo')}
           >
             ↶
           </button>
@@ -217,14 +218,14 @@ export function Builder({
             data-testid="redo"
             onClick={builder.redo}
             disabled={!builder.canRedo}
-            aria-label="إعادة"
+            aria-label={t('shell.redo')}
           >
             ↷
           </button>
         </div>
       </header>
 
-      <div className="zfb__tabs" role="tablist" aria-label="تحرير أو معاينة">
+      <div className="zfb__tabs" role="tablist" aria-label={t('shell.tabsLabel')}>
         <button
           type="button"
           role="tab"
@@ -234,7 +235,7 @@ export function Builder({
           aria-controls="zfb-pane-edit"
           onClick={() => setTab('edit')}
         >
-          تحرير
+          {t('shell.editTab')}
         </button>
         <button
           type="button"
@@ -245,7 +246,7 @@ export function Builder({
           aria-controls="zfb-pane-preview"
           onClick={() => setTab('preview')}
         >
-          معاينة
+          {t('shell.previewTab')}
         </button>
       </div>
 
@@ -254,13 +255,17 @@ export function Builder({
           className="zfb__pane zfb__pane--edit"
           id="zfb-pane-edit"
           hidden={tab !== 'edit'}
-          aria-label="تحرير"
+          aria-label={t('shell.editPane')}
         >
           {builder.restorePrompt ? (
             <div className="zfb-prompt" role="alertdialog" data-testid="restore-prompt">
               <p>
-                لديك تعديلات غير محفوظة على هذا الجهاز من{' '}
-                {new Date(builder.restorePrompt.localUpdatedAt).toLocaleString('ar')}. هل نستعيدها؟
+                {t('shell.restorePrompt', {
+                  when: formatter.dateTime(new Date(builder.restorePrompt.localUpdatedAt), {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  }),
+                })}
               </p>
               <div className="zfb-prompt__actions">
                 <button
@@ -269,7 +274,7 @@ export function Builder({
                   data-testid="restore-accept"
                   onClick={builder.acceptRestore}
                 >
-                  استعادة تعديلاتي
+                  {t('shell.restoreAccept')}
                 </button>
                 <button
                   type="button"
@@ -277,7 +282,7 @@ export function Builder({
                   data-testid="restore-decline"
                   onClick={builder.declineRestore}
                 >
-                  تجاهلها
+                  {t('shell.restoreDecline')}
                 </button>
               </div>
             </div>
@@ -285,7 +290,7 @@ export function Builder({
 
           {builder.conflict ? (
             <div className="zfb-prompt" role="alertdialog" data-testid="conflict-prompt">
-              <p>فُتحت هذه الدعوة في مكان آخر وتغيّرت نفس الحقول.</p>
+              <p>{t('conflict.body')}</p>
               <div className="zfb-prompt__actions">
                 <button
                   type="button"
@@ -293,7 +298,7 @@ export function Builder({
                   data-testid="conflict-keep-mine"
                   onClick={() => builder.resolveConflict('mine')}
                 >
-                  إبقاء تعديلاتي
+                  {t('shell.conflictKeepMine')}
                 </button>
                 <button
                   type="button"
@@ -301,13 +306,13 @@ export function Builder({
                   data-testid="conflict-take-theirs"
                   onClick={() => builder.resolveConflict('theirs')}
                 >
-                  استخدام النسخة الأخرى
+                  {t('shell.conflictTakeTheirs')}
                 </button>
               </div>
             </div>
           ) : null}
 
-          <nav className="zfb-steps" aria-label="خطوات البناء">
+          <nav className="zfb-steps" aria-label={t('shell.stepsLabel')}>
             {BUILDER_STEP_DEFINITIONS.map((definition) => (
               <button
                 key={definition.id}
@@ -318,11 +323,11 @@ export function Builder({
                 onClick={() => goToStep(definition.id)}
               >
                 {isStepComplete(document, definition.id) ? (
-                  <span className="zfb-steps__tick" aria-label="مكتملة">
+                  <span className="zfb-steps__tick" aria-label={t('shell.stepComplete')}>
                     ✓
                   </span>
                 ) : null}
-                {STEP_LABELS[definition.id]}
+                {t(`steps.${definition.id}`)}
               </button>
             ))}
           </nav>
@@ -340,7 +345,7 @@ export function Builder({
                 if (previous) goToStep(previous.id);
               }}
             >
-              → السابق
+              {t('shell.previous')}
             </button>
             <button
               type="button"
@@ -352,17 +357,17 @@ export function Builder({
                 if (next) goToStep(next.id);
               }}
             >
-              التالي ←
+              {t('shell.next')}
             </button>
           </div>
 
           {missing.length > 0 ? (
             <p className="zfb-field__hint" data-testid="readiness">
-              للنشر تحتاج: {missing.length} حقل مطلوب.
+              {t('shell.missingFields', { count: missing.length })}
             </p>
           ) : (
             <p className="zfb-field__hint" data-testid="readiness">
-              جاهزة للنشر.
+              {t('shell.ready')}
             </p>
           )}
 
@@ -381,10 +386,10 @@ export function Builder({
           className="zfb__pane zfb__pane--preview"
           id="zfb-pane-preview"
           hidden={tab !== 'preview'}
-          aria-label="معاينة"
+          aria-label={t('shell.previewPane')}
         >
           <div className="zfb-preview">
-            <div className="zfb-preview__devices" role="group" aria-label="حجم المعاينة">
+            <div className="zfb-preview__devices" role="group" aria-label={t('shell.previewSize')}>
               {(Object.keys(PREVIEW_DEVICES) as PreviewDevice[]).map((candidate) => (
                 <button
                   key={candidate}
@@ -405,7 +410,7 @@ export function Builder({
                 className="zfb-preview__frame"
                 data-device={device}
                 data-testid="preview-frame"
-                title="معاينة الدعوة"
+                title={t('shell.previewTitle')}
                 src={`/preview/${invitationId}`}
                 onLoad={onFrameLoad}
                 // The preview is same-origin so the bridge works, and sandboxed
