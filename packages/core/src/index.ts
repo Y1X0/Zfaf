@@ -17,6 +17,7 @@ export * from './invitation/domain/invitation-status.js';
 export * from './invitation/domain/event-date-time.js';
 export * from './invitation/domain/published-snapshot.js';
 export * from './invitation/domain/document-patch.js';
+export * from './invitation/domain/draft-document.js';
 export * from './invitation/usecases/update-draft.js';
 export * from './invitation/ports/invitation-repository.js';
 

@@ -17,9 +17,10 @@ coverage/
 npm-debug.log*
 pnpm-debug.log*
 
-/playwright-report/
-/test-results/
-/blob-report/
+# Playwright writes these under the app that owns the tests, not the repo root.
+playwright-report/
+test-results/
+blob-report/
 
 .vercel
 .idea/

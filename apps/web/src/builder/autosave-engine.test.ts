@@ -369,6 +369,40 @@ describe('losing the connection', () => {
 // ── conflicts ──────────────────────────────────────────────────────────────
 
 describe('two devices editing at once', () => {
+  it('does not conflict merely because the field exists on the server', async () => {
+    // The defect this guards against was found end to end: the server cannot
+    // tell which fields changed — it has no per-version diffs — so it reports
+    // every path that exists. Trusting that made *every* second device
+    // conflict, which is precisely the case merging exists for.
+    const context = build();
+    const serverDocument = structuredClone(DOCUMENT);
+    serverDocument.content.couple.groomName = 'أحمد';
+
+    let call = 0;
+    context.recorder.respondWith(() => {
+      call += 1;
+      return call === 1
+        ? {
+            kind: 'conflict',
+            currentVersion: 5,
+            currentDocument: serverDocument,
+            // The server's over-broad answer: our own path, echoed back.
+            conflictingPaths: ['/content/couple/brideName'],
+          }
+        : { kind: 'saved', version: 6, savedAt: NOW };
+    });
+
+    context.engine.edit([replace('/content/couple/brideName', 'سارة')]);
+    await context.clock.advance(AUTOSAVE_DEBOUNCE_MS);
+    await context.clock.advance(AUTOSAVE_DEBOUNCE_MS);
+
+    // Nobody touched the bride's name, so there was nothing to ask about.
+    expect(context.engine.currentStatus().kind).toBe('clean');
+    const document = context.engine.currentDocument() as typeof DOCUMENT;
+    expect(document.content.couple.brideName).toBe('سارة');
+    expect(document.content.couple.groomName).toBe('أحمد');
+  });
+
   it('rebases silently when the edits are disjoint', async () => {
     // The overwhelmingly common case: the same person, phone and laptop,
     // different fields. Asking them to choose would be noise.
@@ -420,6 +454,32 @@ describe('two devices editing at once', () => {
     expect(status.kind).toBe('conflict');
     if (status.kind !== 'conflict') return;
     expect(status.conflictingPaths).toEqual(['/content/couple/groomName']);
+  });
+
+  it('exposes the server document so a dialog can act on either answer', async () => {
+    // The status alone carries only the contended paths — enough to *show* a
+    // dialog and not enough to resolve it, which is a defect the UI found.
+    const context = build();
+    const serverDocument = structuredClone(DOCUMENT);
+    serverDocument.content.couple.groomName = 'محمد';
+
+    context.recorder.respondWith({
+      kind: 'conflict',
+      currentVersion: 5,
+      currentDocument: serverDocument,
+      conflictingPaths: ['/content/couple/groomName'],
+    });
+
+    context.engine.edit([replace('/content/couple/groomName', 'أحمد')]);
+    await context.clock.advance(AUTOSAVE_DEBOUNCE_MS);
+
+    const detail = context.engine.pendingConflict();
+    expect(detail).not.toBeNull();
+    expect(detail?.serverVersion).toBe(5);
+    expect(detail?.serverDocument).toEqual(serverDocument);
+
+    context.engine.resolveConflict('mine', serverDocument, 5);
+    expect(context.engine.pendingConflict()).toBeNull();
   });
 
   it('discards nothing until the user chooses', async () => {

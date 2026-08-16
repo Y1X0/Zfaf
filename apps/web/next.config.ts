@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 import type { NextConfig } from 'next';
 
 /**
@@ -30,6 +32,22 @@ const nextConfig: NextConfig = {
     '@zfaf/invitation-renderer',
     '@zfaf/media-client',
   ],
+  /**
+   * Files the tracer cannot see.
+   *
+   * Prisma loads its query engine by path at runtime, so nothing statically
+   * references the `.so.node` binary and the standalone trace leaves it
+   * behind. The failure only appears once the standalone server actually
+   * queries — which is to say, in production rather than in `next build`.
+   */
+  outputFileTracingRoot: join(import.meta.dirname, '..', '..'),
+  outputFileTracingIncludes: {
+    '/**/*': [
+      '../../packages/db/node_modules/.prisma/client/**',
+      '../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/*.node',
+    ],
+  },
+
   // Native and heavyweight modules stay on the Node runtime rather than being
   // bundled. Webpack cannot parse a `.node` binary, and bundling the Prisma or
   // S3 clients would inline megabytes into every route that imports the
@@ -54,7 +72,16 @@ const nextConfig: NextConfig = {
     return config;
   },
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      {
+        // The builder embeds this route in an iframe, so a blanket DENY would
+        // break the preview. Relaxed to SAMEORIGIN and no further: nothing
+        // outside our own origin may frame a private draft.
+        source: '/preview/:path*',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
+    ];
   },
 };
 

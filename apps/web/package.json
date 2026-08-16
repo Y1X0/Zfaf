@@ -8,7 +8,11 @@
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test",
+    "e2e:mobile": "playwright test --project=mobile-390",
+    "bundle:check": "node ../../scripts/measure-builder-bundle.mjs .",
+    "start:e2e": "node scripts/start-standalone.mjs"
   },
   "dependencies": {
     "@zfaf/config": "workspace:*",
@@ -23,6 +27,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.7.0",

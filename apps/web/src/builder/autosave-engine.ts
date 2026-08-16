@@ -1,4 +1,4 @@
-import { type PatchOperation, applyPatch, conflictingPaths, pathsIntersect } from '@zfaf/core';
+import { type PatchOperation, applyPatch } from '@zfaf/core';
 
 /**
  * The autosave engine (D5.5, D5.7).
@@ -57,6 +57,13 @@ export interface AutosaveTransport {
   save(request: SaveRequest): Promise<SaveResponse>;
 }
 
+/** What a caller needs in order to offer the user a choice. */
+export interface PendingConflict {
+  readonly serverDocument: unknown;
+  readonly serverVersion: number;
+  readonly conflictingPaths: readonly string[];
+}
+
 export interface AutosaveOptions {
   readonly transport: AutosaveTransport;
   readonly initialDocument: unknown;
@@ -98,9 +105,29 @@ export class AutosaveEngine {
   private retryTimer: unknown = null;
   private retryIndex = 0;
   private saving = false;
+  /**
+   * The server's side of an unresolved conflict.
+   *
+   * Held because resolving one needs the document the server actually has, and
+   * the status alone carries only the contended paths — which is enough to
+   * *show* a dialog and not enough to act on either answer.
+   */
+  private conflictDetail: PendingConflict | null = null;
+  /**
+   * The document as of the last version the server acknowledged.
+   *
+   * Held because it is the only way to tell a real conflict from an imagined
+   * one. The server cannot: it knows the current document and the version the
+   * client built on, but it does not keep per-version diffs, so asked "did
+   * anyone change this field?" it can only answer "the field exists". That
+   * answer makes every second device conflict, which defeats the whole point
+   * of merging — so the decision is made here, where the base is known.
+   */
+  private baseDocument: unknown;
 
   constructor(private readonly options: AutosaveOptions) {
     this.document = options.initialDocument;
+    this.baseDocument = options.initialDocument;
     this.version = options.initialVersion;
   }
 
@@ -114,6 +141,11 @@ export class AutosaveEngine {
 
   currentStatus(): SaveStatus {
     return this.status;
+  }
+
+  /** The server's side of an unresolved conflict, or null when there is none. */
+  pendingConflict(): PendingConflict | null {
+    return this.conflictDetail;
   }
 
   pendingCount(): number {
@@ -186,6 +218,9 @@ export class AutosaveEngine {
         this.inFlight = [];
         this.version = response.version;
         this.retryIndex = 0;
+        // Everything sent is now the server's truth, so it becomes the base
+        // the next conflict is measured against.
+        this.baseDocument = applyPatchOrKeep(this.baseDocument, batch);
         if (this.pending.length > 0) {
           // Edits arrived while this batch was in flight.
           this.setStatus({ kind: 'pending' });
@@ -199,16 +234,21 @@ export class AutosaveEngine {
 
       case 'conflict': {
         this.retryIndex = 0;
-        const mine = batch.map((operation) => operation.path);
-        const contended = conflictingPaths(mine, response.conflictingPaths);
+        // Contention decided here, against our own base — see `baseDocument`.
+        // A path is contended only when the server's value differs from what
+        // we last saw, not merely because the path exists.
+        const contended = batch
+          .map((operation) => operation.path)
+          .filter((path) => !sameValueAt(this.baseDocument, response.currentDocument, path));
 
-        if (!pathsIntersect(mine, response.conflictingPaths)) {
+        if (contended.length === 0) {
           // The common case: two devices, different fields. Rebase our
           // operations onto the server's document and try again — silently,
           // because there is nothing for the user to decide.
           const rebased = applyPatch(response.currentDocument, batch);
           if (rebased.ok) {
             this.document = rebased.document;
+            this.baseDocument = response.currentDocument;
             this.version = response.currentVersion;
             this.inFlight = [];
             this.pending = coalesce([...batch, ...this.pending]);
@@ -222,6 +262,11 @@ export class AutosaveEngine {
 
         // Genuinely the same field. The user decides; nothing is discarded
         // until they do.
+        this.conflictDetail = {
+          serverDocument: response.currentDocument,
+          serverVersion: response.currentVersion,
+          conflictingPaths: contended,
+        };
         this.setStatus({ kind: 'conflict', conflictingPaths: contended });
         return;
       }
@@ -262,11 +307,13 @@ export class AutosaveEngine {
    * abandons them. Both are explicit — neither happens without a choice.
    */
   resolveConflict(choice: 'mine' | 'theirs', serverDocument: unknown, serverVersion: number): void {
+    this.conflictDetail = null;
     // The contended batch is in flight, not pending — it was moved there when
     // the request went out. Replaying only `pending` would silently drop
     // exactly the edit the user just chose to keep.
     const unsaved = [...this.inFlight, ...this.pending];
     this.version = serverVersion;
+    this.baseDocument = serverDocument;
     this.inFlight = [];
 
     if (choice === 'theirs') {
@@ -290,6 +337,10 @@ export class AutosaveEngine {
   /** Restores from a local draft after the tab was closed or evicted (D5.6). */
   restore(draft: LocalDraft): void {
     this.document = draft.document;
+    // The base is the document minus what is still queued, which we cannot
+    // reconstruct — the restored document itself is the safest approximation:
+    // it makes an unchanged field compare equal, which is the common case.
+    this.baseDocument = draft.document;
     this.version = draft.version;
     this.pending = [...draft.pending];
     this.options.onDocumentChange?.(this.document);
@@ -376,4 +427,38 @@ export function coalesce(operations: readonly PatchOperation[]): PatchOperation[
   }
 
   return result;
+}
+
+/** Applies operations, keeping the original when they do not fit. */
+function applyPatchOrKeep(document: unknown, operations: readonly PatchOperation[]): unknown {
+  const applied = applyPatch(document, operations);
+  return applied.ok ? applied.document : document;
+}
+
+/** Whether two documents hold the same value at a pointer. */
+function sameValueAt(left: unknown, right: unknown, pointer: string): boolean {
+  return JSON.stringify(readPointer(left, pointer)) === JSON.stringify(readPointer(right, pointer));
+}
+
+function readPointer(document: unknown, pointer: string): unknown {
+  const segments = pointer
+    .split('/')
+    .slice(1)
+    .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
+
+  let current: unknown = document;
+  for (const segment of segments) {
+    if (Array.isArray(current)) {
+      if (segment === '-') return undefined;
+      const index = Number(segment);
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) return undefined;
+      current = current[index];
+    } else if (current !== null && typeof current === 'object') {
+      if (!Object.hasOwn(current as Record<string, unknown>, segment)) return undefined;
+      current = (current as Record<string, unknown>)[segment];
+    } else {
+      return undefined;
+    }
+  }
+  return current;
 }

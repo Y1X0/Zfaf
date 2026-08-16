@@ -1,0 +1,518 @@
+/*
+ * Builder styling.
+ *
+ * Hand-written CSS rather than a utility framework, for two reasons that both
+ * matter here: the invitation renderer already ships its own authored
+ * stylesheet and a second styling system would be a second way to do the same
+ * thing, and the builder has a hard initial-JS budget (≤250 KB gzip) that a
+ * framework runtime eats into for no benefit on a page this small.
+ *
+ * Two rules hold throughout:
+ *
+ *   • **Logical properties only** (ADR-0011). Arabic is the default and RTL is
+ *     the default direction, so `margin-inline-start` rather than
+ *     `margin-left` — a physical property here is a layout bug in the primary
+ *     language, not a nicety.
+ *   • **Mobile first.** ~40% of couples build on a phone. The base rules are
+ *     the 390px layout; the desktop split-pane is the enhancement, not the
+ *     other way round.
+ */
+
+:root {
+  --zfb-bg: #faf8f5;
+  --zfb-surface: #ffffff;
+  --zfb-border: #e4ded4;
+  --zfb-text: #221f1b;
+  --zfb-muted: #6b6357;
+  --zfb-accent: #8a6d24;
+  --zfb-accent-contrast: #ffffff;
+  --zfb-danger: #a4302a;
+  --zfb-warning: #8a6a00;
+  --zfb-ok: #2c6e49;
+  --zfb-radius: 10px;
+  --zfb-gap: 1rem;
+  /* 44px is the smallest reliably tappable target. */
+  --zfb-tap: 44px;
+  --zfb-font: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--zfb-bg);
+  color: var(--zfb-text);
+  font-family: var(--zfb-font);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+/* ── shell ───────────────────────────────────────────────────────────────── */
+
+.zfb {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+
+.zfb__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-block: 0.6rem;
+  padding-inline: 1rem;
+  background: var(--zfb-surface);
+  border-block-end: 1px solid var(--zfb-border);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+}
+
+.zfb__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.zfb__bar-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+/* ── save indicator ──────────────────────────────────────────────────────── */
+
+.zfb-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: var(--zfb-muted);
+  white-space: nowrap;
+}
+
+.zfb-save__dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+.zfb-save--offline,
+.zfb-save--failed {
+  color: var(--zfb-danger);
+  font-weight: 600;
+}
+
+.zfb-save--clean {
+  color: var(--zfb-ok);
+}
+
+/* ── mobile tabs ─────────────────────────────────────────────────────────── */
+
+.zfb__tabs {
+  display: flex;
+  border-block-end: 1px solid var(--zfb-border);
+  background: var(--zfb-surface);
+  position: sticky;
+  inset-block-start: 3rem;
+  z-index: 19;
+}
+
+.zfb__tab {
+  flex: 1;
+  min-block-size: var(--zfb-tap);
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--zfb-muted);
+  cursor: pointer;
+  border-block-end: 2px solid transparent;
+}
+
+.zfb__tab[aria-selected='true'] {
+  color: var(--zfb-text);
+  border-block-end-color: var(--zfb-accent);
+  font-weight: 600;
+}
+
+.zfb__panes {
+  flex: 1;
+  display: grid;
+  min-block-size: 0;
+}
+
+.zfb__pane {
+  min-inline-size: 0;
+  padding: var(--zfb-gap);
+}
+
+.zfb__pane[hidden] {
+  display: none;
+}
+
+/* ── steps ───────────────────────────────────────────────────────────────── */
+
+.zfb-steps {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-block-end: 0.5rem;
+  margin-block-end: var(--zfb-gap);
+  scrollbar-width: thin;
+}
+
+.zfb-steps__item {
+  flex: none;
+  min-block-size: var(--zfb-tap);
+  padding-inline: 0.85rem;
+  border: 1px solid var(--zfb-border);
+  border-radius: 999px;
+  background: var(--zfb-surface);
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--zfb-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.zfb-steps__item[aria-current='step'] {
+  border-color: var(--zfb-accent);
+  color: var(--zfb-text);
+  font-weight: 600;
+}
+
+.zfb-steps__tick {
+  color: var(--zfb-ok);
+}
+
+/* ── forms ───────────────────────────────────────────────────────────────── */
+
+.zfb-form {
+  display: grid;
+  gap: var(--zfb-gap);
+  max-inline-size: 34rem;
+}
+
+.zfb-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.zfb-field__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.zfb-field__hint {
+  font-size: 0.8125rem;
+  color: var(--zfb-muted);
+}
+
+.zfb-field__input,
+.zfb-field__select,
+.zfb-field__textarea {
+  min-block-size: var(--zfb-tap);
+  padding-block: 0.5rem;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--zfb-border);
+  border-radius: var(--zfb-radius);
+  background: var(--zfb-surface);
+  color: inherit;
+  font: inherit;
+  inline-size: 100%;
+}
+
+.zfb-field__textarea {
+  min-block-size: 6rem;
+  resize: vertical;
+}
+
+.zfb-field__input:focus-visible,
+.zfb-field__select:focus-visible,
+.zfb-field__textarea:focus-visible,
+.zfb-btn:focus-visible,
+.zfb__tab:focus-visible,
+.zfb-steps__item:focus-visible {
+  outline: 2px solid var(--zfb-accent);
+  outline-offset: 2px;
+}
+
+.zfb-row {
+  display: grid;
+  gap: var(--zfb-gap);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 30rem) {
+  .zfb-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── buttons ─────────────────────────────────────────────────────────────── */
+
+.zfb-btn {
+  min-block-size: var(--zfb-tap);
+  min-inline-size: var(--zfb-tap);
+  padding-inline: 1rem;
+  border: 1px solid var(--zfb-border);
+  border-radius: var(--zfb-radius);
+  background: var(--zfb-surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.zfb-btn--primary {
+  background: var(--zfb-accent);
+  border-color: var(--zfb-accent);
+  color: var(--zfb-accent-contrast);
+  font-weight: 600;
+}
+
+.zfb-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.zfb-btn--icon {
+  padding-inline: 0.5rem;
+}
+
+.zfb__nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+/* ── panels ──────────────────────────────────────────────────────────────── */
+
+.zfb-panel {
+  border: 1px solid var(--zfb-border);
+  border-radius: var(--zfb-radius);
+  background: var(--zfb-surface);
+  margin-block-start: var(--zfb-gap);
+}
+
+.zfb-panel__summary {
+  min-block-size: var(--zfb-tap);
+  display: flex;
+  align-items: center;
+  padding-inline: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.zfb-panel__body {
+  padding: 0.9rem;
+  padding-block-start: 0;
+  display: grid;
+  gap: var(--zfb-gap);
+}
+
+.zfb-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.zfb-swatch {
+  min-block-size: var(--zfb-tap);
+  padding-inline: 0.75rem;
+  border: 1px solid var(--zfb-border);
+  border-radius: var(--zfb-radius);
+  background: var(--zfb-surface);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.zfb-swatch[aria-pressed='true'] {
+  border-color: var(--zfb-accent);
+  font-weight: 600;
+}
+
+.zfb-swatch__chips {
+  display: inline-flex;
+}
+
+.zfb-swatch__chip {
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  margin-inline-start: -4px;
+}
+
+.zfb-contrast-warning {
+  color: var(--zfb-danger);
+  font-size: 0.8125rem;
+}
+
+/* ── sections list ───────────────────────────────────────────────────────── */
+
+.zfb-sections {
+  list-style: none;
+  margin: 0;
+  padding-inline-start: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.zfb-sections__item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--zfb-border);
+  border-radius: var(--zfb-radius);
+  padding-inline: 0.6rem;
+  padding-block: 0.35rem;
+  background: var(--zfb-surface);
+}
+
+.zfb-sections__name {
+  flex: 1;
+  font-size: 0.9375rem;
+}
+
+.zfb-sections__item--off .zfb-sections__name {
+  color: var(--zfb-muted);
+  text-decoration: line-through;
+}
+
+.zfb-sections__locked {
+  font-size: 0.75rem;
+  color: var(--zfb-muted);
+}
+
+/* ── preview ─────────────────────────────────────────────────────────────── */
+
+.zfb-preview {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+}
+
+.zfb-preview__devices {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.zfb-preview__stage {
+  inline-size: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+}
+
+.zfb-preview__frame {
+  border: 1px solid var(--zfb-border);
+  border-radius: var(--zfb-radius);
+  background: var(--zfb-surface);
+  inline-size: 100%;
+  block-size: 70dvh;
+  max-inline-size: 100%;
+}
+
+.zfb-preview__frame[data-device='tablet'] {
+  inline-size: 768px;
+}
+
+.zfb-preview__frame[data-device='desktop'] {
+  inline-size: 1280px;
+}
+
+.zfb-preview-empty {
+  padding: 2rem;
+  text-align: center;
+  color: #6b6357;
+}
+
+.zfb-preview--no-motion *,
+.zf-preview--no-motion * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* ── prompts ─────────────────────────────────────────────────────────────── */
+
+.zfb-prompt {
+  border: 1px solid var(--zfb-accent);
+  border-radius: var(--zfb-radius);
+  background: var(--zfb-surface);
+  padding: 0.9rem;
+  margin-block-end: var(--zfb-gap);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.zfb-prompt__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.zfb-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── desktop ─────────────────────────────────────────────────────────────── */
+
+@media (min-width: 64rem) {
+  .zfb__tabs {
+    display: none;
+  }
+
+  .zfb__panes {
+    grid-template-columns: minmax(22rem, 30rem) 1fr;
+  }
+
+  /* Both panes are visible at once, so the mobile tab state stops applying. */
+  .zfb__pane[hidden] {
+    display: block;
+  }
+
+  .zfb__pane--edit {
+    border-inline-end: 1px solid var(--zfb-border);
+    overflow-y: auto;
+    max-block-size: calc(100dvh - 3rem);
+  }
+
+  .zfb__pane--preview {
+    background: #efeae2;
+  }
+
+  .zfb-preview__frame {
+    block-size: calc(100dvh - 9rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
