@@ -61,6 +61,8 @@ describe('parseEnv', () => {
     const production = {
       ...valid,
       NODE_ENV: 'production',
+      MAIL_DRIVER: 'resend',
+      MAIL_RESEND_API_KEY: 're_test_key',
       PUBLIC_BASE_URL: 'https://zfaf.app',
       SESSION_SECRET: 'replace-me-with-at-least-32-characters-of-random',
       TOTP_ENCRYPTION_KEY: 'z'.repeat(48),
@@ -70,7 +72,12 @@ describe('parseEnv', () => {
   });
 
   it('refuses plaintext http and the local storage driver in production', () => {
-    const production = { ...valid, NODE_ENV: 'production' };
+    const production = {
+      ...valid,
+      NODE_ENV: 'production',
+      MAIL_DRIVER: 'resend',
+      MAIL_RESEND_API_KEY: 're_test_key',
+    };
     try {
       parseEnv(production);
       throw new Error('expected parseEnv to throw');
@@ -79,5 +86,50 @@ describe('parseEnv', () => {
       expect(issues).toContain('https');
       expect(issues).toContain('minio');
     }
+  });
+
+  it('requires a Resend key when the resend driver is selected', () => {
+    expect(() => parseEnv({ ...valid, MAIL_DRIVER: 'resend' })).toThrow(/MAIL_RESEND_API_KEY/);
+    expect(() =>
+      parseEnv({ ...valid, MAIL_DRIVER: 'resend', MAIL_RESEND_API_KEY: 're_x' }),
+    ).not.toThrow();
+  });
+
+  it('refuses the noop mail driver in production', () => {
+    /**
+     * Silent failure by configuration.
+     *
+     * Nothing throws and nothing logs an error — a customer simply waits at an
+     * inbox for a verification link that was never sent. Refusing to boot is
+     * the only behaviour that surfaces it before a customer does.
+     */
+    expect(() =>
+      parseEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        PUBLIC_BASE_URL: 'https://zfaf.app',
+        STORAGE_DRIVER: 's3',
+        MAIL_DRIVER: 'noop',
+      }),
+    ).toThrow(/noop/);
+  });
+
+  it('refuses the smtp driver in production, because no SMTP adapter exists', () => {
+    /**
+     * The same silent loss as `noop`, under a name that reads like a working
+     * transport. The composition root falls back to the no-op service for
+     * `smtp`; in development that is a logged warning, and in production it
+     * would be a customer waiting at an inbox.
+     */
+    expect(() =>
+      parseEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        PUBLIC_BASE_URL: 'https://zfaf.app',
+        STORAGE_DRIVER: 's3',
+        MAIL_DRIVER: 'smtp',
+        MAIL_SMTP_URL: 'smtp://mail.example.com:587',
+      }),
+    ).toThrow(/smtp/);
   });
 });

@@ -191,6 +191,16 @@ const INVITATION_SELECT = {
   createdAt: true,
   updatedAt: true,
   owner: { select: { email: true } },
+  /**
+   * Every address this invitation used to answer on (ADR-0013).
+   *
+   * Read for the kill switch: each old slug still answers 301, that redirect
+   * is cacheable, and a printed QR code carries an old address forever — so a
+   * purge that cleared only the current one would leave the most durable route
+   * to a suspended page working. Ordered oldest-first so the audit trail reads
+   * chronologically.
+   */
+  slugHistory: { select: { oldSlug: true }, orderBy: { changedAt: 'asc' } },
   // A count, never the rows. This is the line that keeps guest data out of the
   // admin console.
   _count: { select: { rsvps: true } },
@@ -202,6 +212,7 @@ function toInvitationRow(row: InvitationRow): AdminInvitationRow {
   return {
     id: row.id,
     slug: row.slug,
+    previousSlugs: row.slugHistory.map((entry) => entry.oldSlug),
     title: row.title,
     status: row.status as InvitationStatus,
     ownerId: row.ownerId,

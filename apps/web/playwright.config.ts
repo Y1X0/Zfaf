@@ -19,10 +19,29 @@ import { defineConfig, devices } from '@playwright/test';
 const executablePath = process.env['CHROMIUM_PATH'] ?? '/opt/pw-browsers/chromium';
 
 const PORT = Number(process.env['E2E_PORT'] ?? 3100);
+
+/**
+ * A deployment to run against instead of a local server (Go-Live gate 2).
+ *
+ * Unset — which is every local run and every CI run — nothing below changes:
+ * the suite still builds, starts and tests the standalone server on loopback.
+ *
+ * Set, it points the suite at a real deployment and starts no server. It
+ * exists for one specific question that no local harness can answer: the D9.1
+ * locale rewrite depends on how the hostname the server is bound to compares
+ * with the `Host` a proxy forwards, and a platform's proxy is not this
+ * repository's TLS terminator (docs/22 §6).
+ *
+ * Only the read-only suites are meaningful this way — `locale-routing.spec.ts`
+ * seeds nothing and writes nothing. Anything that signs in or publishes would
+ * be writing to a production database, which is not a test, it is an incident.
+ */
+const remoteBaseUrl = process.env['E2E_BASE_URL'];
+
 // HTTPS, because the session cookie is `__Host-` prefixed and browsers refuse
 // that prefix over plain HTTP. Testing over HTTP would have meant weakening
 // the cookie for tests, which is the one thing a security test must not do.
-const baseURL = `https://127.0.0.1:${PORT}`;
+const baseURL = remoteBaseUrl ?? `https://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -39,8 +58,10 @@ export default defineConfig({
   use: {
     baseURL,
     // The certificate is self-signed and generated per run; the transport is
-    // real TLS, which is all the cookie prefix cares about.
-    ignoreHTTPSErrors: true,
+    // real TLS, which is all the cookie prefix cares about. Against a real
+    // deployment the certificate is validated in full — a broken chain there
+    // is a finding, not noise to suppress.
+    ignoreHTTPSErrors: !remoteBaseUrl,
     trace: 'retain-on-failure',
     locale: 'ar',
     timezoneId: 'UTC',
@@ -70,7 +91,12 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
+  // Nothing to start when the target is a deployment that is already running.
+  ...(remoteBaseUrl ? {} : { webServer: localWebServer() }),
+});
+
+function localWebServer() {
+  return {
     // The standalone production server — the same one we deploy. `next start`
     // refuses to run against `output: 'standalone'`, and a development server
     // behaves differently enough under server components and bundling that
@@ -113,7 +139,21 @@ export default defineConfig({
       STORAGE_ACCESS_KEY_ID: 'e2e',
       STORAGE_SECRET_ACCESS_KEY: 'e2e-secret',
       STORAGE_PUBLIC_BASE_URL: 'http://127.0.0.1:9000/zfaf-media',
-      MAIL_DRIVER: 'noop',
+      /**
+       * The real adapter, pointed at a local sink.
+       *
+       * Not `noop`: the configuration layer refuses it in production — a
+       * transport that silently sends nothing is the exact fault that rule
+       * exists to prevent — and satisfying the rule by relaxing it would make
+       * the suite prove less than production requires. `start:e2e` serves the
+       * sink on `PORT + 2`, so registration exercises the adapter a customer's
+       * verification email will go through.
+       *
+       * The key is not a credential; nothing it reaches is real.
+       */
+      MAIL_DRIVER: 'resend',
+      MAIL_RESEND_API_KEY: 'e2e-not-a-real-key',
+      MAIL_RESEND_ENDPOINT: `http://127.0.0.1:${PORT + 2}/emails`,
       MAIL_FROM_ADDRESS: 'no-reply@zfaf.test',
       DEFAULT_MARKET: 'SA',
     },
@@ -124,5 +164,5 @@ export default defineConfig({
     timeout: 120_000,
     stdout: 'ignore',
     stderr: 'pipe',
-  },
-});
+  } as const;
+}

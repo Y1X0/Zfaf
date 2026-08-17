@@ -66,6 +66,13 @@ jobs:
       - name: Alert definitions
         run: pnpm alerts:check
 
+      # The deployment blueprint and the environment schema must agree. A
+      # variable added to the schema and forgotten in render.yaml fails at the
+      # end of a deploy; a variable *misspelled* in render.yaml never fails at
+      # all, and the application simply runs without it.
+      - name: Production environment wiring
+        run: pnpm env:check
+
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest

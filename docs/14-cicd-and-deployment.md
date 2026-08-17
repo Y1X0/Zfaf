@@ -196,6 +196,14 @@ const flags = {
 
 ## 8. طوبولوجيا الإنتاج
 
+> **⚠️ عُدِّلت في بوابة الإطلاق الثانية — [ADR-0022](adr/0022-render-deployment-topology.md).**
+> ما يلي هو التصميم كما كُتب في Phase 0: أربعة مزوّدين (Vercel · Neon · Upstash ·
+> Fly.io). القرار الساري هو **Render** للتطبيق والعامل وPostgres وKey Value، مع
+> بقاء Cloudflare (DNS · CDN · TLS) وR2 وResend كما هما. يُبقى المخطّط القديم هنا
+> لأن سبب استبعاده جزء من القرار، لا لأنه ما زال ساري المفعول.
+> التزويد نفسه لم يحدث؛ ما يصفه [`render.yaml`](../render.yaml) **مخطّط للمراجعة**،
+> وخطواته في [docs/22](22-deployment-render.md).
+
 ```
                     ┌─────────────────────┐
                     │   Cloudflare        │
@@ -254,7 +262,7 @@ staging.zfaf.app     → Vercel (staging)
 | البيئة | المدير |
 |--------|--------|
 | local | `.env.local` (مستثنى من Git) |
-| preview/staging/prod | متغيرات بيئة المنصة (Vercel/Fly) |
+| preview/staging/prod | متغيرات بيئة المنصة — مجموعتا `zfaf-config` و`zfaf-secrets` على Render ([ADR-0022](adr/0022-render-deployment-topology.md)) |
 | CI | GitHub Actions Secrets |
 
 **السياسات:**
@@ -288,6 +296,10 @@ GET /api/health/ready    → جاهزية القبول                          
 | تخزين R2 | 500GB | مراجعة سياسة الاحتفاظ |
 | حوسبة Neon | 100 ساعة/شهر | مراجعة الاستعلامات |
 | Resend | 50k بريد/شهر | تحقق من إساءة الاستخدام |
+
+> بعد [ADR-0022](adr/0022-render-deployment-topology.md) صار مزوّد الحوسبة **Render**
+> (التطبيق والعامل وPostgres وKey Value). العتبات أعلاه تُقرأ على فاتورته؛ الأرقام
+> نفسها لم تتغيّر، وما تغيّر هو الجهة التي تُصدرها.
 
 **خطة الهجرة موثّقة مسبقاً** ([16-cost-estimate.md](16-cost-estimate.md)) — لا نكتشف
 أن الفاتورة صارت $800 ثم نبدأ التفكير.

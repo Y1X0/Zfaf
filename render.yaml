@@ -1,0 +1,235 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Zfaf — production infrastructure blueprint.
+#
+#                        ⚠️  REVIEW ONLY — NOT APPLIED  ⚠️
+#
+# Nothing in this file has been created. No Render service, no database, no
+# key-value instance, no environment variable and no secret has been touched.
+# This is a written proposal of the shape of production, for the owner to read
+# and approve before anything is provisioned. Applying it is a deliberate,
+# separate act performed by a human (docs/22 §4).
+#
+# It contains no secret and never will: every credential below is declared
+# `sync: false`, which is Render's way of saying "this variable exists, and its
+# value is typed into the dashboard by a person". A value written into this
+# file would be a value written into Git history, and into every clone of it.
+#
+# What it describes:
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  Cloudflare  —  DNS · TLS · CDN · cache purge by URL                │
+#   └───────────────────────────────┬─────────────────────────────────────┘
+#                                   │
+#          ┌────────────────────────┴────────────────────┐
+#          ▼                                             ▼
+#   ┌──────────────┐                            ┌─────────────────┐
+#   │  zfaf-web    │  Docker · web service      │  R2 (media)     │
+#   │  Next.js     │  health /api/health        │  cdn.zfaf.app   │
+#   └──────┬───────┘                            └─────────────────┘
+#          │
+#   ┌──────┴────────┬──────────────────┬────────────────────┐
+#   ▼               ▼                  ▼                    ▼
+# ┌──────────┐ ┌──────────────┐ ┌──────────────┐  ┌──────────────────┐
+# │ Postgres │ │  Key Value   │ │  zfaf-worker │  │ Resend · Sentry  │
+# │  16      │ │ rate limits, │ │ media queue, │  │ (external)       │
+# │          │ │ queue, views │ │ sweeps       │  └──────────────────┘
+# └──────────┘ └──────────────┘ └──────────────┘
+#
+# Decisions this encodes are recorded in ADR-0022. Two of them are the owner's
+# to confirm, not mine, and both are flagged in place below: the **region**
+# (data residency, PDPL) and the **plan tier** of each paid resource.
+# ═══════════════════════════════════════════════════════════════════════════
+
+previewsEnabled: false
+
+services:
+  # ── The application ─────────────────────────────────────────────────────
+  - type: web
+    name: zfaf-web
+    runtime: docker
+    repo: https://github.com/y1x0/zfaf
+    branch: main
+    # Frankfurt is the closest Render region to the Gulf market, and it is a
+    # placeholder until the owner and legal counsel settle Saudi data
+    # residency under the PDPL. That is not an engineering decision and this
+    # line must not be read as one having been made.
+    region: frankfurt
+    plan: standard
+    dockerfilePath: ./infra/docker/web.Dockerfile
+    dockerContext: .
+    # Liveness, not readiness. `/api/health/deep` touches every dependency and
+    # would let a transient database blip pull every instance at once (docs/14
+    # §11) — exactly the failure the split exists to prevent.
+    healthCheckPath: /api/health
+    # Deliberately off. docs/14 §4 puts a human gate in front of production:
+    # migrations, then worker, then web, each verified. A push to `main` that
+    # deploys itself removes the gate the process depends on.
+    autoDeploy: false
+    numInstances: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zfaf-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: zfaf-keyvalue
+          type: keyvalue
+          property: connectionString
+      - fromGroup: zfaf-config
+      - fromGroup: zfaf-secrets
+
+  # ── The background worker ───────────────────────────────────────────────
+  # Image encoding, the media sweep, invitation expiry and the analytics flush.
+  # Separate from the web service since day one so an encode never shares a
+  # request budget with a page render (docs/08 §6).
+  - type: worker
+    name: zfaf-worker
+    runtime: docker
+    repo: https://github.com/y1x0/zfaf
+    branch: main
+    region: frankfurt
+    plan: standard
+    dockerfilePath: ./infra/docker/worker.Dockerfile
+    dockerContext: .
+    autoDeploy: false
+    # Migrations run here, and only here.
+    #
+    # The worker image carries the Prisma CLI, the schema and the whole
+    # `migrations/` directory; the web image is a pruned standalone bundle that
+    # carries none of them. Putting the step on the service that deploys first
+    # also matches the order docs/14 §4 requires — migrate, worker, web — so
+    # the old code is never running against a schema it has not seen.
+    #
+    # Expand-only, always (docs/14 §5). A `DROP` in the same deploy as the code
+    # that stopped using the column breaks the instance still serving traffic.
+    preDeployCommand: pnpm --filter @zfaf/db db:deploy
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zfaf-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: zfaf-keyvalue
+          type: keyvalue
+          property: connectionString
+      # The worker needs the *whole* environment, not the part it uses.
+      # `parseEnv` validates every variable at boot and refuses a partial one
+      # — which is why a missing session secret is caught on deploy rather than
+      # by the first person who tries to sign in.
+      - fromGroup: zfaf-config
+      - fromGroup: zfaf-secrets
+
+  # ── Redis-compatible key-value store ────────────────────────────────────
+  # Rate limits (D3.7), the BullMQ media queue, the rotating analytics salt and
+  # the view buffer.
+  - type: keyvalue
+    name: zfaf-keyvalue
+    region: frankfurt
+    plan: starter
+    # `noeviction`, and this one is not a preference.
+    #
+    # BullMQ requires it: under an eviction policy the store may drop a job
+    # hash to make room, and a dropped job is an uploaded photograph that never
+    # becomes a thumbnail, with nothing anywhere recording that it was lost.
+    # The rate limiter and the analytics buffer would rather lose a key than
+    # fail a write; the queue would not.
+    maxmemoryPolicy: noeviction
+    # Empty list = reachable only from inside the Render private network.
+    ipAllowList: []
+
+databases:
+  - name: zfaf-postgres
+    databaseName: zfaf
+    user: zfaf
+    region: frankfurt
+    # A paid plan, as decided. The free tier expires and is deleted, which for
+    # a database holding a couple's invitation is not a tier, it is a fault.
+    # The exact slug and its disk size must be confirmed against Render's
+    # current plan list at provisioning time (docs/22 §3).
+    plan: basic-1gb
+    postgresMajorVersion: '16'
+    ipAllowList: []
+
+envVarGroups:
+  # ── Configuration ───────────────────────────────────────────────────────
+  # Not secret, and committed here on purpose: these are the values whose
+  # correctness a reviewer can check by reading them.
+  - name: zfaf-config
+    envVars:
+      # The canonical origin. Everything the application prints in a link —
+      # verification emails, QR payloads, the public page's canonical tag —
+      # comes from this and never from a request header (M6).
+      - key: PUBLIC_BASE_URL
+        value: https://zfaf.app
+      # ISO 3166-1 alpha-2. Which market is active is configuration, never a
+      # hard-coded assumption (ADR-0015).
+      - key: DEFAULT_MARKET
+        value: SA
+      - key: STORAGE_DRIVER
+        value: r2
+      - key: STORAGE_REGION
+        value: auto
+      - key: STORAGE_BUCKET_MEDIA
+        value: zfaf-media
+      # Where a guest's browser fetches a photograph from. A Cloudflare custom
+      # domain in front of the bucket, never the R2 endpoint directly — the
+      # public page's CSP names this origin, and the bucket's own hostname
+      # leaks the account id to every visitor.
+      - key: STORAGE_PUBLIC_BASE_URL
+        value: https://cdn.zfaf.app
+      - key: MAIL_DRIVER
+        value: resend
+      # Must be a domain with SPF, DKIM and DMARC verified in Resend before
+      # first traffic. Without them the verification link lands in spam and the
+      # entire publish flow stalls for every new customer (docs/14 §9).
+      - key: MAIL_FROM_ADDRESS
+        value: no-reply@zfaf.app
+      - key: MAIL_FROM_NAME
+        value: Zfaf
+
+  # ── Secrets ─────────────────────────────────────────────────────────────
+  # Every one is `sync: false`: declared here so the wiring is reviewable, and
+  # typed into the Render dashboard by a person. None of these values exists in
+  # this repository, in this file, or in any transcript.
+  - name: zfaf-secrets
+    envVars:
+      # `openssl rand -base64 48`. Two different values — sharing them makes a
+      # routine session-secret rotation silently break every enrolled
+      # authenticator, and `parseEnv` refuses to boot if they are equal.
+      - key: SESSION_SECRET
+        sync: false
+      - key: TOTP_ENCRYPTION_KEY
+        sync: false
+      # https://<account-id>.r2.cloudflarestorage.com — not secret exactly, but
+      # account-identifying, and there is no reason for it to be in Git.
+      - key: STORAGE_ENDPOINT
+        sync: false
+      # An R2 API token scoped to the media bucket alone. Object Read & Write,
+      # nothing else, no other bucket.
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: MAIL_RESEND_API_KEY
+        sync: false
+      # The kill switch's cache purge (D8.5). A Cloudflare API token with
+      # `Cache Purge` on this zone and nothing else — an account-wide token
+      # here would mean a moderation bug could edit DNS.
+      - key: CDN_ZONE_ID
+        sync: false
+      - key: CDN_API_TOKEN
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      # Guards the component detail on /api/health/deep. Without it the probe
+      # still answers, but never names which dependency is down.
+      - key: HEALTH_CHECK_TOKEN
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false

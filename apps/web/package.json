@@ -17,6 +17,7 @@
     "lighthouse": "node ../../scripts/lighthouse-public-page.mjs"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.0",
     "@resvg/resvg-js": "^2.6.2",
     "@zfaf/config": "workspace:*",
     "@zfaf/core": "workspace:*",

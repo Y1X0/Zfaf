@@ -20,7 +20,7 @@ import { S3StorageProvider } from '@zfaf/infra/storage';
 import { NodeIdGenerator, NodeTokenGenerator } from '@zfaf/infra/crypto/tokens';
 import { AesGcmSecretCipher } from '@zfaf/infra/crypto/cipher';
 import { JsonLogger, LoggingErrorTracker, SentryErrorTracker } from '@zfaf/infra/observability';
-import { NoopMailService } from '@zfaf/infra/mail';
+import { NoopMailService, ResendMailService } from '@zfaf/infra/mail';
 import { SlidingWindowRateLimiter } from '@zfaf/infra/rate-limit';
 import { RedisAnalyticsBuffer, RedisDailySalt, getRedis } from '@zfaf/infra/analytics';
 import { CloudflareCdnPurger } from '@zfaf/infra/cdn';
@@ -117,7 +117,7 @@ export function container(): Container {
     media: new PrismaMediaRepository(prisma),
     salt: new RedisDailySalt(redis),
     analyticsBuffer: new RedisAnalyticsBuffer(redis),
-    cdn: buildCdnPurger(env.CDN_ZONE_ID, env.CDN_API_TOKEN),
+    cdn: buildCdnPurger(env.CDN_ZONE_ID, env.CDN_API_TOKEN, env.PUBLIC_BASE_URL),
     storage: new S3StorageProvider({
       driver: env.STORAGE_DRIVER,
       endpoint: env.STORAGE_ENDPOINT,
@@ -135,15 +135,59 @@ export function container(): Container {
     clock: systemClock,
     logger,
     errors: buildErrorTracker(env.SENTRY_DSN, env.NODE_ENV, logger),
-    // The SMTP adapter arrives with the transactional-mail work; until then a
-    // notification is dropped rather than pretended, and the `noop` driver is
-    // the configured default outside production.
-    mail: new NoopMailService(),
+    mail: buildMailService(env, logger),
     humanCheck: new TurnstileHumanCheck(),
     notifyRsvp: notifyRsvp,
   };
 
   return cached;
+}
+
+/**
+ * The configured mail driver (Go-Live gate 2).
+ *
+ * `noop` drops the message rather than pretending to have sent it, which is
+ * the honest behaviour for development — and which `packages/config` now
+ * refuses to allow in production, because silence there means a customer
+ * waiting at an inbox for a link nobody sent.
+ *
+ * **`smtp` has no adapter**, and has not had one since Phase 0. It falls back
+ * to the no-op transport with an error in the log rather than throwing, and
+ * that choice is deliberate in both directions:
+ *
+ *   • Throwing here would take down the *whole application*. This function
+ *     runs once inside the composition root that every route imports, so a
+ *     mail misconfiguration would stop the public invitation page from
+ *     rendering — a page that sends no mail at all.
+ *   • Falling back silently is what the code did before this change, and it is
+ *     how a driver named after a working transport ends up sending nothing for
+ *     a month. Hence the log line, and hence `parseEnv` refusing `smtp` in
+ *     production outright.
+ */
+function buildMailService(env: ReturnType<typeof getEnv>, logger: Logger): MailService {
+  switch (env.MAIL_DRIVER) {
+    case 'resend':
+      return new ResendMailService({
+        // Validated by the config layer: `resend` without a key does not boot.
+        apiKey: env.MAIL_RESEND_API_KEY as string,
+        from: `${env.MAIL_FROM_NAME} <${env.MAIL_FROM_ADDRESS}>`,
+        publicBaseUrl: env.PUBLIC_BASE_URL,
+        // Absent in production, where the adapter's own default is the
+        // provider's API. Set by the e2e harness so the suite exercises this
+        // adapter against a sink it controls.
+        endpoint: env.MAIL_RESEND_ENDPOINT,
+        logger,
+      });
+    case 'smtp':
+      logger.error('mail.driver_unimplemented', {
+        driver: 'smtp',
+        // Said plainly, because the consequence is invisible otherwise.
+        effect: 'no mail will be sent; falling back to the no-op transport',
+      });
+      return new NoopMailService();
+    default:
+      return new NoopMailService();
+  }
 }
 
 /**
@@ -170,9 +214,13 @@ function buildErrorTracker(
  * review can tell "we purged the edge" from "there was no edge to purge" —
  * which a stub that always claimed success would have erased.
  */
-function buildCdnPurger(zoneId: string | undefined, apiToken: string | undefined): CdnPurger {
+function buildCdnPurger(
+  zoneId: string | undefined,
+  apiToken: string | undefined,
+  publicBaseUrl: string,
+): CdnPurger {
   if (!zoneId || !apiToken) return NO_CDN_PURGER;
-  return new CloudflareCdnPurger({ zoneId, apiToken });
+  return new CloudflareCdnPurger({ zoneId, apiToken, publicBaseUrl });
 }
 
 /**

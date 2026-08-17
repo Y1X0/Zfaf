@@ -50,6 +50,8 @@ Publishing + RSVP + Guest Management + Analytics + Payments + Admin.
 | 18 | [Risks Register](docs/18-risks.md) | المخاطر التقنية والتجارية والقانونية + التخفيف |
 | 19 | [**Decisions — Record of Approval**](docs/19-decisions-pending-approval.md) | ✅ القرارات المثبَّتة والمعتمدة (مع التعديلات) |
 | 20 | [**Phase 1 Milestones**](docs/20-phase1-milestones.md) | ▶️ **خطة التنفيذ الحالية** — 11 milestone بمعايير خروج |
+| 21 | [Launch Checklist](docs/21-launch-checklist.md) | ما هو جاهز فعلاً وما هو بوابة مفتوحة — بحالة صادقة لكل بند |
+| 22 | [Deployment — Render](docs/22-deployment-render.md) | ⏸ خطوات نشر الإنتاج. المخطّط [`render.yaml`](render.yaml) **للمراجعة فقط؛ لم يُزوَّد شيء** |
 
 ### Architecture Decision Records
 
@@ -72,6 +74,11 @@ Publishing + RSVP + Guest Management + Analytics + Payments + Admin.
 | [0015](docs/adr/0015-market-configuration-model.md) | نموذج تكوين السوق — لا ترميز صلب للسعودية | ✅ Accepted |
 | [0016](docs/adr/0016-static-qr-in-mvp.md) | QR ثابت داخل MVP | ✅ Accepted |
 | [0017](docs/adr/0017-invitation-visibility-model.md) | Unlisted ≠ Private — نموذج ظهور الدعوة | ✅ Accepted |
+| [0018](docs/adr/0018-first-party-authentication.md) | مصادقة على مخططنا مباشرة بدل Auth.js | 🟡 Proposed |
+| [0019](docs/adr/0019-heic-decoding-strategy.md) | استراتيجية فك ترميز HEIC | 🟡 Proposed |
+| [0020](docs/adr/0020-zero-hydration-public-page.md) | الصفحة العامة بلا Hydration | ✅ Accepted |
+| [0021](docs/adr/0021-marketing-surface-js-budget.md) | ميزانية JS لسطح التسويق (تعديل مبني على قياس) | ✅ Accepted |
+| [0022](docs/adr/0022-render-deployment-topology.md) | طوبولوجيا الإنتاج: Render + Cloudflare + R2 + Resend | ✅ Accepted · ⏸ لم يُزوَّد |
 
 ---
 

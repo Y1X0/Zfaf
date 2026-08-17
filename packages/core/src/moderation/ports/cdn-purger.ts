@@ -7,14 +7,27 @@
  * after the button was pressed — which, for the reason a kill switch gets
  * pressed at all, is four and a half minutes too long.
  *
- * Purging is by **cache tag**, not by URL. The public route stamps every
- * response with `cache-tag: invitation:{id}`, so one call clears the page and
- * its OG image together, and it keeps working after a slug rename when the old
- * addresses are still in circulation (ADR-0013).
+ * ## Purging by URL, not by cache tag
+ *
+ * The M8 implementation purged by `cache-tag`, which is a single call clearing
+ * the page and its preview image together. The owner's decision for Go-Live is
+ * **purge by URL**, on the grounds that it is simpler, more precise, and does
+ * not depend on how a provider resolves one tag across several resources.
+ *
+ * The cost is real and small: the caller must know which addresses an
+ * invitation occupies, rather than stamping one label and forgetting. That
+ * knowledge is domain knowledge — `/i/{slug}` and its OG image, plus every
+ * address still in circulation after a rename (ADR-0013) — so it lives here,
+ * in `invitationCachePaths`, and the adapter only resolves those paths against
+ * the origin it was configured with.
+ *
+ * The `cache-tag` response header stays on the public page. It costs nothing,
+ * it is useful for a provider dashboard, and removing it would be a change to
+ * M6's response contract for no gain.
  */
 
 export type CdnPurgeOutcome =
-  | { readonly purged: true }
+  | { readonly purged: true; readonly urls: number }
   /**
    * The purge did not happen, and the caller is expected to say so out loud.
    *
@@ -28,9 +41,44 @@ export type CdnPurgeOutcome =
 export interface CdnPurger {
   /** A stable name for logs and the audit entry, e.g. `cloudflare` or `none`. */
   readonly key: string;
-  purgeTag(tag: string): Promise<CdnPurgeOutcome>;
+  /**
+   * Clears these paths from the edge.
+   *
+   * Paths, not absolute URLs: the origin is deployment configuration and the
+   * domain has no business knowing it. The adapter joins the two.
+   */
+  purgePaths(paths: readonly string[]): Promise<CdnPurgeOutcome>;
 }
 
+/**
+ * Every address a published invitation occupies.
+ *
+ * Three things are covered, and the third is the one that gets forgotten:
+ *
+ *   1. The page itself.
+ *   2. Its preview image — the card WhatsApp renders. A suspended invitation
+ *      whose image is still cached keeps showing the couple's photograph in
+ *      every chat the link was shared to, which for an impersonation report is
+ *      most of the harm.
+ *   3. **Addresses from before a rename.** ADR-0013 keeps `slug_history` and
+ *      answers 301 from the old address, and that redirect is cacheable. A
+ *      printed QR code carries the old address forever.
+ */
+export function invitationCachePaths(
+  slug: string | null,
+  previousSlugs: readonly string[] = [],
+): readonly string[] {
+  const slugs = [slug, ...previousSlugs].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+
+  // A draft has no slug and occupies no public address; purging nothing is the
+  // correct answer, not an error.
+  const unique = [...new Set(slugs)];
+  return unique.flatMap((value) => [`/i/${value}`, `/i/${value}/og`]);
+}
+
+/** Kept for the `cache-tag` header the public route still stamps (M6). */
 export function invitationCacheTag(invitationId: string): string {
   return `invitation:${invitationId}`;
 }
@@ -45,5 +93,5 @@ export function invitationCacheTag(invitationId: string): string {
  */
 export const NO_CDN_PURGER: CdnPurger = {
   key: 'none',
-  purgeTag: async () => ({ purged: false, reason: 'no CDN configured' }),
+  purgePaths: async () => ({ purged: false, reason: 'no CDN configured' }),
 };

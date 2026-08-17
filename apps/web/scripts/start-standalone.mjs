@@ -18,7 +18,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:https';
-import { request } from 'node:http';
+import { createServer as createHttpServer, request } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,21 @@ if (existsSync(join(webRoot, 'public'))) {
 const publicPort = Number(process.env.PORT ?? 3100);
 // The Next server listens here; only the TLS terminator is reachable.
 const upstreamPort = publicPort + 1;
+/**
+ * A mail sink, and the reason it exists rather than a `noop` driver.
+ *
+ * The suite runs with `NODE_ENV=production`, and the configuration layer
+ * refuses both `noop` and `smtp` there — a driver that silently sends nothing
+ * is exactly the production fault it is meant to prevent. Pointing the real
+ * Resend adapter at a local sink satisfies that rule honestly: registration
+ * builds the request, sets its tags and handles the response through the same
+ * code path a customer's verification email will take.
+ *
+ * It accepts anything and answers as the provider does. Assertions about what
+ * an email may contain live in `packages/infra/src/mail/mail.test.ts`, where
+ * they can be precise; this only has to exist.
+ */
+const mailPort = publicPort + 2;
 
 const certDir = join(tmpdir(), 'zfaf-e2e-tls');
 mkdirSync(certDir, { recursive: true });
@@ -153,7 +168,19 @@ const proxy = createServer(
 
 proxy.listen(publicPort, '127.0.0.1');
 
+const mailSink = createHttpServer((incoming, outgoing) => {
+  // Drained rather than read: an unconsumed request body keeps the socket open
+  // and the adapter's own timeout would then be what ends the test.
+  incoming.resume();
+  incoming.on('end', () => {
+    outgoing.writeHead(200, { 'content-type': 'application/json' });
+    outgoing.end(JSON.stringify({ id: 'e2e-mail-sink' }));
+  });
+});
+mailSink.listen(mailPort, '127.0.0.1');
+
 const shutdown = () => {
+  mailSink.close();
   proxy.close();
   child.kill('SIGTERM');
   try {
@@ -167,6 +194,7 @@ const shutdown = () => {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 child.on('exit', (code) => {
+  mailSink.close();
   proxy.close();
   process.exit(code ?? 0);
 });

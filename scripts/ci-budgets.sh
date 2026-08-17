@@ -32,7 +32,13 @@ export STORAGE_BUCKET_MEDIA=zfaf-media
 export STORAGE_ACCESS_KEY_ID=ci
 export STORAGE_SECRET_ACCESS_KEY=ci-secret
 export STORAGE_PUBLIC_BASE_URL=http://127.0.0.1:9000/zfaf-media
-export MAIL_DRIVER=noop
+# The real adapter, pointed at the sink `start-standalone.mjs` serves on
+# PORT + 2. Not `noop`: the configuration layer refuses it under
+# NODE_ENV=production, because a transport that silently sends nothing is the
+# fault that rule exists to prevent. Nothing below is a credential.
+export MAIL_DRIVER=resend
+export MAIL_RESEND_API_KEY=ci-not-a-real-key
+export MAIL_RESEND_ENDPOINT="http://127.0.0.1:$((PORT + 2))/emails"
 export MAIL_FROM_ADDRESS=no-reply@zfaf.test
 export DEFAULT_MARKET=SA
 

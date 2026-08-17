@@ -46,6 +46,18 @@ export const EnvSchema = z.object({
 
   MAIL_DRIVER: z.enum(['smtp', 'resend', 'noop']).default('smtp'),
   MAIL_SMTP_URL: z.string().url().optional(),
+  /** Required when the driver is `resend`; the cross-field rule below enforces it. */
+  MAIL_RESEND_API_KEY: z.string().min(1).optional(),
+  /**
+   * Where the Resend adapter posts. Defaults to the provider's API.
+   *
+   * Overridable so a test or a staging environment can send at a sink it
+   * controls instead of at the internet. That is what the end-to-end suite
+   * uses: with it, registration exercises the real adapter — the request it
+   * builds, the tags it sets, the failure it raises — rather than a no-op
+   * transport that proves nothing about the code production runs.
+   */
+  MAIL_RESEND_ENDPOINT: z.string().url().optional(),
   MAIL_FROM_ADDRESS: z.string().email(),
   MAIL_FROM_NAME: NonEmpty.default('Zfaf'),
 
@@ -119,6 +131,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   if (env.MAIL_DRIVER === 'smtp' && !env.MAIL_SMTP_URL) {
     throw new EnvValidationError(['MAIL_SMTP_URL is required when MAIL_DRIVER is "smtp"']);
   }
+  if (env.MAIL_DRIVER === 'resend' && !env.MAIL_RESEND_API_KEY) {
+    throw new EnvValidationError(['MAIL_RESEND_API_KEY is required when MAIL_DRIVER is "resend"']);
+  }
 
   // Production must never run against the local development defaults.
   if (env.NODE_ENV === 'production') {
@@ -139,6 +154,35 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     }
     if (env.STORAGE_DRIVER === 'minio') {
       productionIssues.push('STORAGE_DRIVER "minio" is a local development driver');
+    }
+    /**
+     * `noop` mail in production is silent failure by configuration.
+     *
+     * Nothing throws, nothing logs an error, and a customer waits at an inbox
+     * for a verification link that was never sent. Refusing to boot is the
+     * only behaviour that surfaces it before a customer does.
+     */
+    if (env.MAIL_DRIVER === 'noop') {
+      productionIssues.push(
+        'MAIL_DRIVER "noop" sends nothing — verification and reset links would never arrive',
+      );
+    }
+    /**
+     * And `smtp` is the same failure wearing a plausible name.
+     *
+     * The enum has listed it since Phase 0 and **no SMTP adapter exists**: the
+     * composition root falls back to the no-op transport for it, which in
+     * development is a warning and in production would be the silent loss
+     * above. Refused here rather than left to be discovered by the first
+     * customer who never receives a link.
+     *
+     * When an SMTP adapter is actually built, delete this rule — not the
+     * `noop` one above it.
+     */
+    if (env.MAIL_DRIVER === 'smtp') {
+      productionIssues.push(
+        'MAIL_DRIVER "smtp" has no adapter yet — production mail must use "resend"',
+      );
     }
     if (productionIssues.length > 0) throw new EnvValidationError(productionIssues);
   }

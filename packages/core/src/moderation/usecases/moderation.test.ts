@@ -22,7 +22,6 @@ import {
   adminListAuditLog,
   adminListInvitations,
   adminListUsers,
-  invitationCacheTag,
   moderateInvitation,
 } from '@zfaf/core';
 
@@ -57,10 +56,14 @@ const admin = actor('admin');
 const customer = actor('customer', OWNER_ID);
 const anonymous: Actor = { kind: 'anonymous', ipHash: 'abc' };
 
-function invitationRow(status: InvitationStatus = 'PUBLISHED'): AdminInvitationRow {
+function invitationRow(
+  status: InvitationStatus = 'PUBLISHED',
+  previousSlugs: readonly string[] = [],
+): AdminInvitationRow {
   return {
     id: INVITATION_ID,
     slug: 'ahmad-and-sara',
+    previousSlugs,
     title: 'Ahmad & Sara',
     status,
     ownerId: OWNER_ID,
@@ -108,11 +111,14 @@ class FakeInvitations {
 
 class RecordingPurger implements CdnPurger {
   readonly key = 'recording';
-  readonly tags: string[] = [];
-  outcome: { purged: true } | { purged: false; reason: string } = { purged: true };
+  readonly paths: string[] = [];
+  outcome: { purged: true; urls: number } | { purged: false; reason: string } = {
+    purged: true,
+    urls: 0,
+  };
 
-  async purgeTag(tag: string) {
-    this.tags.push(tag);
+  async purgePaths(paths: readonly string[]) {
+    this.paths.push(...paths);
     return this.outcome;
   }
 }
@@ -150,7 +156,32 @@ describe('moderateInvitation', () => {
     expect(invitations.transitions[0]?.next).toBe('SUSPENDED');
     // By tag, so the page and its OG image go together and an old slug still
     // in circulation is covered too.
-    expect(cdn.tags).toEqual([invitationCacheTag(INVITATION_ID)]);
+    // The page and its preview card together: a suspended invitation whose
+    // image is still cached keeps showing the couple's photograph in every
+    // chat the link reached, which for an impersonation report is most of the
+    // harm.
+    expect(cdn.paths).toEqual(['/i/ahmad-and-sara', '/i/ahmad-and-sara/og']);
+  });
+
+  it('clears the addresses the invitation used to answer on', async () => {
+    // ADR-0013 keeps old slugs answering 301, and that redirect is cacheable.
+    // A printed QR code carries the old address forever, so clearing only the
+    // current one leaves the most durable route to a suspended page working.
+    repository.invitation = invitationRow('PUBLISHED', ['old-name', 'older-name']);
+
+    await moderateInvitation(
+      { actor: support, invitationId: INVITATION_ID, action: 'suspend', reason: 'reported' },
+      deps(),
+    );
+
+    expect(cdn.paths).toEqual([
+      '/i/ahmad-and-sara',
+      '/i/ahmad-and-sara/og',
+      '/i/old-name',
+      '/i/old-name/og',
+      '/i/older-name',
+      '/i/older-name/og',
+    ]);
   });
 
   it('unsuspends back to PAUSED, never straight to PUBLISHED', async () => {

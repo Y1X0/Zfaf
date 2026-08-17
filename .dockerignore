@@ -1,0 +1,27 @@
+# What never enters a build context.
+#
+# The first three lines are about correctness rather than image size: the
+# Dockerfiles install with `--frozen-lockfile` inside the image, and a host
+# `node_modules` copied in would shadow that install with whatever happened to
+# be on the developer's machine — including binaries built for their CPU.
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+.turbo
+
+.git
+.github
+
+# Local secrets. Nothing here is committed, and nothing here may be baked into
+# a layer either — an image layer is as readable as a file.
+.env
+.env.*
+!.env.example
+
+# Test and tooling output that has no business in a runtime image.
+**/test-results
+**/playwright-report
+**/coverage
+**/*.log

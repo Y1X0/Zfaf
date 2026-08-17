@@ -6,7 +6,7 @@ import { canTransition } from '../../invitation/domain/invitation-status.js';
 import type { InvitationRepository } from '../../invitation/ports/invitation-repository.js';
 
 import type { AdminRepository } from '../ports/admin-repository.js';
-import { type CdnPurger, invitationCacheTag } from '../ports/cdn-purger.js';
+import { type CdnPurger, invitationCachePaths } from '../ports/cdn-purger.js';
 
 /**
  * The kill switch (D8.5).
@@ -132,7 +132,16 @@ export async function moderateInvitation(
   );
   if (!changed) return { ok: false, code: 'NOT_FOUND', message: 'Invitation not found' };
 
-  const purge = await deps.cdn.purgeTag(invitationCacheTag(invitation.id));
+  /**
+   * Every address this invitation occupies, including the ones it used to.
+   *
+   * A rename leaves the old address answering 301 (ADR-0013), and a printed QR
+   * code carries it forever — so clearing only the current one would leave the
+   * most durable route to a suspended page working.
+   */
+  const purge = await deps.cdn.purgePaths(
+    invitationCachePaths(invitation.slug, invitation.previousSlugs),
+  );
 
   await deps.recordModeration({
     actorId: input.actor.kind === 'user' ? input.actor.userId : null,

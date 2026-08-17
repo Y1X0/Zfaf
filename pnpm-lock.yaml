@@ -53,6 +53,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@node-rs/argon2':
+        specifier: ^2.0.0
+        version: 2.1.0
       '@resvg/resvg-js':
         specifier: ^2.6.2
         version: 2.6.2

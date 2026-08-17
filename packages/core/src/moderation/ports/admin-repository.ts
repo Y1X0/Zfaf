@@ -37,6 +37,14 @@ export interface AdminUserRow {
 export interface AdminInvitationRow {
   readonly id: string;
   readonly slug: string | null;
+  /**
+   * Addresses this invitation used to answer on (ADR-0013).
+   *
+   * Needed by the kill switch: each one still answers 301, that redirect is
+   * cacheable, and a printed QR code carries an old address forever. Empty for
+   * an invitation that was never renamed, which is most of them.
+   */
+  readonly previousSlugs: readonly string[];
   readonly title: string;
   readonly status: InvitationStatus;
   readonly ownerId: string;
