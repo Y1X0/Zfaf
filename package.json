@@ -31,7 +31,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "alerts:check": "node scripts/check-alerts.mjs",
     "env:check": "node scripts/check-production-env.mjs",
-    "backup:drill": "bash scripts/backup-restore-drill.sh"
+    "backup:drill": "bash scripts/backup-restore-drill.sh",
+    "docker:smoke": "bash scripts/docker-smoke.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
