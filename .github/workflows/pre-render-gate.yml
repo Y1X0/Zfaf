@@ -83,8 +83,8 @@ jobs:
         run: pnpm --filter @zfaf/db db:generate
 
       # The schema has to exist before the smoke seeds an invitation against
-      # it. The worker image runs `migrate deploy` itself later — that step is
-      # one of the twelve checks, and it is idempotent, so doing it here first
+      # it. The worker image runs `migrate deploy` itself later — that is one of
+      # the smoke's own checks, and it is idempotent, so doing it here first
       # does not weaken it.
       - name: Apply migrations
         run: pnpm --filter @zfaf/db db:deploy
@@ -104,8 +104,8 @@ jobs:
 
       # One repository per invocation — `docker images` takes at most one
       # argument, and passing two made this step fail *after* the gate had
-      # already printed twelve passing checks. A reporting line that can fail
-      # the job it is reporting on is worse than no reporting line.
+      # already printed a full set of passing checks. A reporting line that can
+      # fail the job it is reporting on is worse than no reporting line.
       - name: Image sizes
         if: success()
         run: |

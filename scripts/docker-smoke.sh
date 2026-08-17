@@ -220,6 +220,43 @@ else
   fail "prisma migrate deploy failed inside the image"
 fi
 
+# The second half of `preDeployCommand`, and it needs its own check.
+#
+# `db:templates` is what carries the shipped manifests into the database, and
+# without it the `templates` table is empty and no customer can create an
+# invitation at all. It is therefore deploy-blocking by design — which makes it
+# exactly the kind of step that must be proven *inside the image* rather than
+# only on a developer's machine.
+#
+# Two things it depends on that the image could plausibly lack: `tsx`, which
+# only `@zfaf/db` declares, and the manifest files under
+# `packages/invitation-renderer/templates/`, which a pruned image would not
+# carry. Both have failed in this repository before, in that exact shape.
+templates_out="$(docker exec -w /app "$WORKER_NAME" pnpm --filter @zfaf/db db:templates 2>&1 || true)"
+if grep -qE '^\[templates\] created [0-9]+' <<<"$templates_out"; then
+  pass "publishes the template library from inside the image"
+else
+  fail "db:templates failed inside the image"
+  tail -12 <<<"$templates_out"
+fi
+
+# Run twice on purpose: it runs on *every* deploy, so "idempotent" is a
+# property the gate has to hold rather than a claim in a comment.
+templates_again="$(docker exec -w /app "$WORKER_NAME" pnpm --filter @zfaf/db db:templates 2>&1 || true)"
+if grep -qE '^\[templates\] created 0, updated 0, unchanged [1-9]' <<<"$templates_again"; then
+  pass "publishing the library twice changes nothing"
+else
+  fail "db:templates is not idempotent"
+  tail -12 <<<"$templates_again"
+fi
+
+#
+# That `unchanged` count is also the evidence the rows are really there: the
+# second run reads them back and matches each checksum. Whether the *catalogue*
+# then offers them is asserted where it can be asserted precisely, in
+# `packages/db/tests/template-library.test.ts`, rather than by reaching into a
+# container with a second database client.
+
 # A deploy sends SIGTERM. If it does not arrive, an in-flight encode is killed
 # and its asset is left in `processing` for another worker to reclaim.
 docker kill --signal=SIGTERM "$WORKER_NAME" >/dev/null 2>&1 || true
