@@ -65,7 +65,7 @@ Cloudflare R2 للتخزين، Cloudflare لـ DNS/CDN/TLS، Sentry للأخطا
 | نصوص بريد ثنائية اللغة، بلا صورة ولا خط ولا أصل خارجي | `packages/infra/src/mail/mail-templates.ts` |
 | رفض `MAIL_DRIVER=noop` في الإنتاج | `packages/config/src/env.ts` |
 | التفريغ بالعنوان + عناوين ما قبل إعادة التسمية | `packages/core/src/moderation/ports/cdn-purger.ts` |
-| صورتا Docker، ومخطّط `render.yaml` **للمراجعة فقط** | `infra/docker/`, `render.yaml` |
+| صورتا Docker (مبنيّتان ومُشغَّلتان محلياً)، ومخطّط `render.yaml` **للمراجعة فقط** | `infra/docker/`, `render.yaml` |
 | فحص يمنع انحراف المخطّط عن مخطّط البيئة | `scripts/check-production-env.mjs` (داخل `pnpm verify`) |
 
 ## 5. ما لم يُحسم — وليس لي أن أحسمه
@@ -79,8 +79,10 @@ Cloudflare R2 للتخزين، Cloudflare لـ DNS/CDN/TLS، Sentry للأخطا
 عند التزويد ([docs/22 §3](../22-deployment-render.md)).
 
 **D9.1 على بنية حقيقية.** الإصلاح المحلي يربط الخادم بـ `localhost` عمداً؛ الحاوية
-لا تستطيع ذلك ويجب أن تربط `0.0.0.0`. الشروط التي أنتجت العطل **مختلفة هناك، لا
-غائبة**، ولا شيء محلي يثبت في أيّ اتجاه تميل ([docs/22 §6](../22-deployment-render.md)).
+لا تستطيع ذلك ويجب أن تربط `0.0.0.0`. جرت بروفة: الصورة مربوطة على `0.0.0.0` خلف
+وسيط يمرّر `Host` كما يفعل موازن المنصة، والتسعة عشر اختباراً تمرّ
+([docs/22 §6](../22-deployment-render.md)). ذلك يزيل الفرضية الأرجح ولا يُغني عن
+الإعادة على Render، حيث الوسيط يضيف ترويساته ويُنهي TLS و`Host` نطاق حقيقي.
 
 ## 6. الحالة
 

@@ -1,9 +1,11 @@
-# syntax=docker/dockerfile:1
 #
 # The background worker image (Go-Live gate 2).
 #
-# ⚠️ Written and reviewed, **never executed in this environment** — no Docker
-# daemon here. First build is a step on the deployment checklist (docs/22 §4).
+# Built and run in this environment, with the caveats in docs/22 §11. The image
+# starts, `prisma migrate deploy` runs from it exactly as Render's
+# `preDeployCommand` will, and SIGTERM reaches the process so an in-flight
+# encode finishes. Getting there took fixing three faults that no test had ever
+# reached, because nothing had ever started this process for real.
 #
 # ## Why this image keeps its source and its dev dependencies
 #

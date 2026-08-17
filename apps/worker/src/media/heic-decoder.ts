@@ -1,4 +1,4 @@
-import { HeifDecoder, type HeifImage } from 'libheif-js';
+import libheif, { type HeifImage } from 'libheif-js';
 
 import { MAX_IMAGE_PIXELS, type ProcessingFailure, checkImageDimensions } from '@zfaf/core';
 
@@ -18,6 +18,17 @@ import { MAX_IMAGE_PIXELS, type ProcessingFailure, checkImageDimensions } from '
  *
  * This module is the only place `libheif-js` may be imported, enforced by a
  * `dependency-cruiser` rule.
+ *
+ * ## Why the default import
+ *
+ * `libheif-js` is CommonJS whose entry is `module.exports = require(...)()` —
+ * an object built at call time. Node's ESM loader detects named exports by
+ * *parsing* a CommonJS file, and there is nothing there to parse, so
+ * `import { HeifDecoder }` throws `does not provide an export named` the
+ * moment the worker starts under a real Node ESM runtime. Bundlers and the
+ * test runner paper over it; the container did not, which is where this was
+ * found. Taking the default and reaching for the class at the call site is
+ * what actually works in both.
  */
 
 export interface DecodedImage {
@@ -46,7 +57,7 @@ export type HeicDecodeResult =
 export async function decodeHeic(source: Uint8Array): Promise<HeicDecodeResult> {
   let images: HeifImage[];
   try {
-    images = new HeifDecoder().decode(source);
+    images = new libheif.HeifDecoder().decode(source);
   } catch (error) {
     return { ok: false, code: 'FAILED_DECODE', reason: describe(error) };
   }

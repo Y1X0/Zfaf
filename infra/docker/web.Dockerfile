@@ -1,10 +1,13 @@
-# syntax=docker/dockerfile:1
 #
 # The web image (Go-Live gate 2).
 #
-# ⚠️ Built and reviewed, **never executed in this environment** — this machine
-# has no Docker daemon. The first real build is a step on the deployment
-# checklist (docs/22 §4), not something already proven here.
+# Built and run in this environment, with two caveats recorded in docs/22 §11:
+# the sandbox's proxy blocks Debian's repositories, so the `apt` layer below is
+# the one step that could not be exercised here, and the local run substituted
+# the full `node:22-bookworm` base that already carries what apt installs.
+# Everything after that — the install, the Prisma client, `next build`, the
+# standalone tree, and the running container — was verified, and found two real
+# faults in the process (docs/22 §4).
 #
 # Four stages, and the split is not decoration: `deps` installs from the
 # lockfile alone so that a source change does not re-resolve the dependency

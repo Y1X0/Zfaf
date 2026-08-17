@@ -18,4 +18,14 @@ declare module 'libheif-js' {
   export class HeifDecoder {
     decode(buffer: Uint8Array): HeifImage[];
   }
+
+  /**
+   * The module object itself.
+   *
+   * Declared because the package is CommonJS with a computed `module.exports`,
+   * so the named export above cannot be imported directly under Node's ESM
+   * loader — see the note in `heic-decoder.ts`.
+   */
+  const libheif: { HeifDecoder: typeof HeifDecoder };
+  export default libheif;
 }

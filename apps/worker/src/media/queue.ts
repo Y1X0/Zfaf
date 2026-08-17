@@ -20,7 +20,16 @@ import {
  * nobody can inspect afterwards is a failure nobody will fix.
  */
 
-export const MEDIA_QUEUE_NAME = 'media:process';
+/**
+ * No colon, and that is a constraint rather than a style choice.
+ *
+ * BullMQ builds every Redis key as `{prefix}:{queue}:{...}` and refuses a
+ * queue name containing `:` outright — `new Worker()` throws at construction,
+ * so the worker process exits on boot. The same rule applies to a custom job
+ * id (see `enqueueMediaProcessing`). Both were `media:...` until the first
+ * container run, where the process died before it could take a job.
+ */
+export const MEDIA_QUEUE_NAME = 'media-process';
 
 export const MEDIA_JOB_OPTIONS = {
   attempts: 3,
@@ -47,7 +56,9 @@ export async function enqueueMediaProcessing(
   queue: Queue<ProcessMediaJobData>,
   mediaId: string,
 ): Promise<void> {
-  await queue.add(MEDIA_QUEUE_NAME, { mediaId }, { jobId: `media:${mediaId}` });
+  // `media-`, not `media:` — BullMQ throws `Custom Id cannot contain :`, which
+  // would have turned every completed upload into a 500.
+  await queue.add(MEDIA_QUEUE_NAME, { mediaId }, { jobId: `media-${mediaId}` });
 }
 
 export interface MediaWorkerOptions {
