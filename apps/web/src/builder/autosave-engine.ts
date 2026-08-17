@@ -106,6 +106,14 @@ export class AutosaveEngine {
   private retryIndex = 0;
   private saving = false;
   /**
+   * The save currently in flight, so `flush` can wait for it.
+   *
+   * A boolean was not enough. `flush` used to return the moment it saw one
+   * running, which meant "send everything, now" quietly sent nothing — see the
+   * note on `flush`.
+   */
+  private savingPromise: Promise<void> | null = null;
+  /**
    * The server's side of an unresolved conflict.
    *
    * Held because resolving one needs the document the server actually has, and
@@ -180,17 +188,58 @@ export class AutosaveEngine {
   }
 
   /**
-   * Sends whatever is queued, now.
+   * Sends whatever is queued, and does not return until it is sent.
    *
-   * Called on step changes, when the tab is hidden, and before publishing —
-   * the moments when waiting out a debounce risks losing the work.
+   * Called on step changes, when the tab is hidden, and **before publishing** —
+   * the moments when waiting out a debounce risks losing the work. The publish
+   * panel awaits this precisely so that "everything typed reaches the server
+   * before the snapshot is taken".
+   *
+   * ## The bug this shape exists to prevent
+   *
+   * It used to open with `if (this.saving) return;` — so when a save happened
+   * to be in flight, the one call whose entire purpose is *"send everything,
+   * now"* returned immediately having sent nothing, and reported success by
+   * resolving. The queued edits stayed queued.
+   *
+   * That is not a rare interleaving. It is what happens whenever somebody acts
+   * within a second and a half of typing, which is most of the time: the
+   * observed failure was a couple adding a photograph and pressing Publish,
+   * and getting an invitation published **without the photograph** — silently,
+   * with the edit still in the queue and the save indicator still spinning.
+   *
+   * So a flush that finds a save running now waits for it and then sends what
+   * is left. The loop is bounded rather than `while (true)`: each pass either
+   * empties the queue or hands it to a retry with its own clock, and a flush
+   * that cannot finish must return to its caller rather than spin.
    */
   async flush(): Promise<void> {
     this.cancelDebounce();
     this.cancelRetry();
+
+    // Waited out, not skipped. Errors are handled inside `send`, so this never
+    // rejects; it only tells us the slot is free again.
+    if (this.saving) await this.savingPromise;
+
+    // Another flush may have taken the slot while we waited. Requests are not
+    // stacked: the queue is shared, so that one carries our operations too.
     if (this.saving) return;
+
     if (this.pending.length === 0 && this.inFlight.length === 0) return;
 
+    /**
+     * Exactly one request, deliberately.
+     *
+     * A batch that comes back `offline` or `conflict` leaves `inFlight`
+     * populated on purpose — the retry has its own clock, and a conflict is
+     * waiting on a person. Sending again from here would double the request
+     * and paper over both.
+     */
+    await this.send();
+  }
+
+  /** One request. The queue moves into flight, the response is handled. */
+  private async send(): Promise<void> {
     this.saving = true;
     // Moved rather than copied: an edit arriving mid-request queues behind
     // this batch instead of being sent twice.
@@ -200,16 +249,21 @@ export class AutosaveEngine {
 
     this.setStatus({ kind: 'saving' });
 
-    let response: SaveResponse;
-    try {
-      response = await this.options.transport.save({ baseVersion: this.version, patch: batch });
-    } catch {
-      response = { kind: 'offline' };
-    } finally {
-      this.saving = false;
-    }
+    const run = (async () => {
+      let response: SaveResponse;
+      try {
+        response = await this.options.transport.save({ baseVersion: this.version, patch: batch });
+      } catch {
+        response = { kind: 'offline' };
+      } finally {
+        this.saving = false;
+      }
+      await this.handle(response, batch);
+    })();
 
-    await this.handle(response, batch);
+    // Published before it is awaited, so a concurrent `flush` can find it.
+    this.savingPromise = run;
+    await run;
   }
 
   private async handle(response: SaveResponse, batch: PatchOperation[]): Promise<void> {

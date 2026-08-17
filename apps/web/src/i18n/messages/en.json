@@ -228,7 +228,25 @@
       "gallery": "Gallery ({count})",
       "image": "Photograph {number}",
       "removeImage": "Remove photograph {number}",
-      "uploadNote": "Photographs upload straight to storage — the file never passes through our servers."
+      "uploadNote": "Photographs upload straight to storage — the file never passes through our servers.",
+      "addCover": "Add a cover photo",
+      "addImage": "Add a photo",
+      "upload": {
+        "signing": "One moment…",
+        "uploading": "Uploading…",
+        "confirming": "Confirming…",
+        "processing": "Processing…",
+        "errors": {
+          "FILE_TOO_LARGE": "This photo is larger than your plan allows.",
+          "UNSUPPORTED_TYPE": "That file type is not supported. Choose a JPEG, PNG, WebP or HEIC image.",
+          "GALLERY_LIMIT_REACHED": "You have reached the number of gallery photos your plan allows.",
+          "STORAGE_QUOTA_EXCEEDED": "Your plan's storage will not fit this photo. Delete an older one first.",
+          "QUARANTINED": "We could not process that file, so it was not added. Try a different photo.",
+          "STILL_PROCESSING": "Processing is taking longer than usual. Refresh the page in a moment.",
+          "NETWORK": "The connection dropped during the upload. Please try again.",
+          "UNKNOWN": "The photo could not be uploaded. Please try again."
+        }
+      }
     },
     "music": {
       "hint": "Tracks come from a licensed library. Uploading is not offered — see the music policy.",
@@ -395,5 +413,95 @@
     "notesLabel": "Notes",
     "privacyNote": "We use no cookies and store no visitor addresses. \"Distinct visitors\" is a daily estimate: someone who opens the invitation on two different days is counted twice.",
     "freshnessNote": "The numbers can lag by up to a minute."
+  },
+  "auth": {
+    "working": "One moment…",
+    "signOut": "Sign out",
+    "field": {
+      "name": "Name (optional)",
+      "email": "Email address",
+      "password": "Password",
+      "newPassword": "New password",
+      "passwordHint": "At least 12 characters. Pick a phrase you will remember and nobody else will guess."
+    },
+    "errors": {
+      "NETWORK": "We could not reach the server. Check your connection and try again.",
+      "RATE_LIMITED": "Too many attempts in a short time. Wait a moment and try again.",
+      "VALIDATION_FAILED": "Check the values you entered.",
+      "UNAUTHENTICATED": "That email address and password do not match an account.",
+      "UNKNOWN": "Something went wrong. Please try again."
+    },
+    "register": {
+      "title": "Create your account",
+      "lede": "A minute from here to your first invitation.",
+      "submit": "Create account",
+      "haveAccount": "Already have an account?"
+    },
+    "login": {
+      "title": "Sign in",
+      "lede": "Welcome back.",
+      "submit": "Sign in",
+      "forgot": "Forgotten your password?",
+      "noAccount": "No account yet?"
+    },
+    "verify": {
+      "title": "Verify your email",
+      "working": "Verifying…",
+      "done": "Your address is verified. You can publish your invitation and share its link.",
+      "continue": "Go to your dashboard",
+      "failed": "This link is no longer valid — it may have expired or already been used.",
+      "resend": "Send a new link",
+      "resent": "If your address still needs verifying, a new link is on its way.",
+      "signInFirst": "Sign in first, so we know where to send it."
+    },
+    "forgot": {
+      "title": "Reset your password",
+      "lede": "Enter your address. If it has an account with us, we will send a link to choose a new password.",
+      "submit": "Send the link",
+      "sent": "If that address has an account, the link is on its way. Check your inbox, and your spam folder.",
+      "remembered": "Remembered it after all?"
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "lede": "Pick a new password. Every signed-in session on your account will end, on this device and any other.",
+      "submit": "Save password",
+      "done": "Your password is changed and every session has ended. Sign in again.",
+      "linkInvalid": "That reset link has expired or has already been used. Request a new one:"
+    }
+  },
+  "dashboard": {
+    "title": "Your invitations",
+    "empty": "No invitations yet. Start your first one.",
+    "open": "Edit",
+    "replies": "Replies",
+    "view": "Public page",
+    "verifyNotice": "Your email is not verified yet. You can keep editing; verification is only needed before publishing.",
+    "status": {
+      "DRAFT": "Draft",
+      "PUBLISHED": "Published",
+      "PAUSED": "Paused",
+      "EXPIRED": "Expired",
+      "SUSPENDED": "Suspended",
+      "DELETED": "Deleted"
+    },
+    "new": {
+      "open": "New invitation",
+      "title": "Invitation name",
+      "template": "Template",
+      "someLocked": "Some templates need a higher plan, so they are not listed here.",
+      "date": "Wedding date",
+      "locale": "Invitation language",
+      "localeAr": "Arabic",
+      "localeEn": "English",
+      "submit": "Start",
+      "cancel": "Cancel",
+      "working": "One moment…",
+      "errors": {
+        "PLAN_LIMIT_EXCEEDED": "You have reached the number of invitations your plan allows. Delete or unpublish one to start another.",
+        "INVALID_TITLE": "Give the invitation a name, between 1 and 120 characters.",
+        "INVALID_EVENT_DATE": "Choose a real date for the wedding.",
+        "UNKNOWN": "The invitation could not be created. Please try again."
+      }
+    }
   }
 }

@@ -61,6 +61,17 @@ export const edits = {
     replace(`/content/events/${value.index}/${value.field}`, value.next),
   ],
 
+  /**
+   * Appends to the gallery.
+   *
+   * `/-` rather than an index: two uploads finishing at once would otherwise
+   * both compute the same position from the document they each started with,
+   * and the second would replace the first. The append operator makes the
+   * server decide where it lands.
+   */
+  addGalleryImage: (value: DraftDocument['content']['gallery'][number]) => [
+    { op: 'add' as const, path: '/content/gallery/-', value },
+  ],
   removeGalleryImage: (value: number) => [
     { op: 'remove' as const, path: `/content/gallery/${value}` },
   ],

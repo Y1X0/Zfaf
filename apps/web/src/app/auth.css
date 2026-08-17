@@ -1,0 +1,162 @@
+/**
+ * The auth pages (docs/23 §7.1).
+ *
+ * Logical properties only, like the builder and the dashboard (ADR-0011 §3):
+ * there is no `[dir="rtl"]` override sheet anywhere in this codebase, and an
+ * ESLint rule fails CI on a physical property. The page flips because the
+ * document says which way it reads.
+ *
+ * Mobile-first, and the 44px tap target is not decoration — these are the four
+ * forms somebody fills in on a phone, often on hotel wifi at midnight.
+ */
+
+.zfa {
+  --zfa-bg: #faf7f2;
+  --zfa-surface: #ffffff;
+  --zfa-border: #e4ded4;
+  --zfa-text: #221f1b;
+  --zfa-muted: #6b6154;
+  --zfa-accent: #8a6d24;
+  --zfa-danger: #a3342a;
+  --zfa-radius: 10px;
+  --zfa-tap: 44px;
+
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  min-block-size: 100dvh;
+  padding: 2rem 1rem;
+  background: var(--zfa-bg);
+  color: var(--zfa-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  line-height: 1.7;
+}
+
+.zfa__card {
+  inline-size: 100%;
+  max-inline-size: 26rem;
+  padding: 1.5rem;
+  border: 1px solid var(--zfa-border);
+  border-radius: var(--zfa-radius);
+  background: var(--zfa-surface);
+}
+
+.zfa__brand {
+  display: block;
+  margin-block-end: 1.5rem;
+  color: var(--zfa-accent);
+  font-size: 1.5rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.zfa__title {
+  margin-block: 0 0.25rem;
+  font-size: 1.25rem;
+}
+
+.zfa__lede {
+  margin-block: 0 1.25rem;
+  color: var(--zfa-muted);
+  font-size: 0.95rem;
+}
+
+.zfa-form,
+.zfa-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.zfa-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.zfa-field__label {
+  font-size: 0.9rem;
+  color: var(--zfa-muted);
+}
+
+.zfa-field__input {
+  min-block-size: var(--zfa-tap);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--zfa-border);
+  border-radius: var(--zfa-radius);
+  background: var(--zfa-surface);
+  color: var(--zfa-text);
+  font: inherit;
+}
+
+.zfa-field__input:focus-visible {
+  outline: 2px solid var(--zfa-accent);
+  outline-offset: 1px;
+}
+
+.zfa-field__hint {
+  font-size: 0.8rem;
+  color: var(--zfa-muted);
+}
+
+.zfa-btn {
+  display: inline-grid;
+  place-items: center;
+  min-block-size: var(--zfa-tap);
+  padding-inline: 1rem;
+  border: 1px solid var(--zfa-accent);
+  border-radius: var(--zfa-radius);
+  background: var(--zfa-accent);
+  color: #fff;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.zfa-btn[disabled] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.zfa-error,
+.zfa-ok {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-inline-start: 3px solid;
+  border-radius: var(--zfa-radius);
+  font-size: 0.95rem;
+}
+
+.zfa-error {
+  border-color: var(--zfa-danger);
+  color: var(--zfa-danger);
+  background: #fdf3f2;
+}
+
+.zfa-ok {
+  border-color: var(--zfa-accent);
+  color: var(--zfa-text);
+  background: var(--zfa-bg);
+}
+
+.zfa__alt {
+  margin-block-start: 1.25rem;
+  padding-block-start: 1.25rem;
+  border-block-start: 1px solid var(--zfa-border);
+  color: var(--zfa-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.zfa__alt a {
+  color: var(--zfa-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

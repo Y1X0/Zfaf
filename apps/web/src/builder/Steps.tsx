@@ -1,11 +1,12 @@
 'use client';
 
-import { type ReactElement, useId } from 'react';
+import { type ReactElement, useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 import type { DraftDocument } from '@zfaf/core';
 
 import { edits } from './edits.js';
+import { type UploadStage, uploadImage } from './upload.js';
 import type { BuilderApi } from './useBuilder.js';
 
 /**
@@ -27,6 +28,8 @@ import type { BuilderApi } from './useBuilder.js';
 export interface StepProps {
   readonly document: DraftDocument;
   readonly builder: BuilderApi;
+  /** Needed by the photographs step: an upload is scoped to one invitation. */
+  readonly invitationId: string;
 }
 
 function Field({
@@ -507,7 +510,7 @@ export function EventsStep({ document, builder }: StepProps): ReactElement {
  * compresses, asks for a signed URL, PUTs straight to storage, then confirms.
  * The file never passes through our servers — see docs/10 §4.
  */
-export function PhotosStep({ document, builder }: StepProps): ReactElement {
+export function PhotosStep({ document, builder, invitationId }: StepProps): ReactElement {
   const t = useTranslations('builder.photos');
   const { gallery, cover } = document.content;
 
@@ -532,6 +535,14 @@ export function PhotosStep({ document, builder }: StepProps): ReactElement {
         ) : (
           <p className="zfb-field__hint">{t('noCover')}</p>
         )}
+        <UploadButton
+          invitationId={invitationId}
+          purpose="cover"
+          labelKey="addCover"
+          onUploaded={(image) =>
+            builder.edit('photos.setCover', edits.setCover({ ...image, alt: null }))
+          }
+        />
       </div>
 
       <div className="zfb-field">
@@ -553,11 +564,104 @@ export function PhotosStep({ document, builder }: StepProps): ReactElement {
             </li>
           ))}
         </ul>
+        <UploadButton
+          invitationId={invitationId}
+          purpose="gallery"
+          labelKey="addImage"
+          onUploaded={(image) =>
+            builder.edit('photos.addImage', edits.addGalleryImage({ ...image, alt: null }))
+          }
+        />
       </div>
 
       <p className="zfb-field__hint" data-testid="upload-note">
         {t('uploadNote')}
       </p>
+    </div>
+  );
+}
+
+/**
+ * The upload control (D4.2, docs/23 §7.3).
+ *
+ * A real `<input type="file">`, hidden behind its own label rather than
+ * replaced by one: a styled `<div>` with a click handler is not keyboard
+ * reachable, does not announce itself, and does not open the camera on a
+ * phone. `accept` filters the picker; the *rule* is the server's, re-checked
+ * when the URL is signed and again from the bytes themselves in the worker.
+ *
+ * The document is only edited once the worker reports `ready` — so the URL it
+ * carries is always a derivative, never the original the camera wrote. That
+ * matters beyond format: an untouched phone photo usually names the coordinates
+ * of the couple's home, and only the derivatives have had that stripped.
+ */
+function UploadButton({
+  invitationId,
+  purpose,
+  labelKey,
+  onUploaded,
+}: {
+  readonly invitationId: string;
+  readonly purpose: 'cover' | 'gallery';
+  readonly labelKey: string;
+  readonly onUploaded: (image: {
+    id: string;
+    url: string;
+    width: number | null;
+    height: number | null;
+    blurhash: string | null;
+  }) => void;
+}): ReactElement {
+  const t = useTranslations('builder.photos');
+  const [stage, setStage] = useState<UploadStage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const onPick = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    // Reset immediately, so picking the same file twice after a failure still
+    // fires a change event.
+    event.target.value = '';
+    if (!file) return;
+
+    setError(null);
+    const outcome = await uploadImage(file, { invitationId, purpose, onStage: setStage });
+    setStage(null);
+
+    if (outcome.ok) {
+      onUploaded(outcome.image);
+      return;
+    }
+    // Named codes get their own sentence; anything else gets the honest
+    // fallback rather than a guess dressed up as a diagnosis.
+    const known = [
+      'FILE_TOO_LARGE',
+      'UNSUPPORTED_TYPE',
+      'GALLERY_LIMIT_REACHED',
+      'STORAGE_QUOTA_EXCEEDED',
+      'QUARANTINED',
+      'STILL_PROCESSING',
+      'NETWORK',
+    ];
+    setError(known.includes(outcome.code) ? outcome.code : 'UNKNOWN');
+  };
+
+  return (
+    <div className="zfb-field">
+      <label className="zfb-btn" data-testid={`upload-${purpose}`}>
+        {stage ? t(`upload.${stage}`) : t(labelKey)}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
+          className="zfb-visually-hidden"
+          disabled={stage !== null}
+          onChange={(event) => void onPick(event)}
+        />
+      </label>
+      {error ? (
+        <p className="zfb-field__hint" role="alert" data-testid="upload-error" data-code={error}>
+          {t(`upload.errors.${error}`)}
+        </p>
+      ) : null}
     </div>
   );
 }

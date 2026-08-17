@@ -655,6 +655,66 @@ describe('editing while a save is in flight', () => {
     // The second edit is queued, not lost and not duplicated.
     expect(engine.pendingCount()).toBe(1);
   });
+
+  /**
+   * The regression that published an invitation without its photograph.
+   *
+   * `flush` used to open with `if (this.saving) return;` — so the one call
+   * whose whole purpose is *"send everything, now"* returned having sent
+   * nothing whenever a save happened to be in flight, and reported success by
+   * resolving. `PublishPanel` awaits exactly this call so that everything
+   * typed reaches the server before the snapshot is taken.
+   *
+   * The observed failure: a couple adds a photograph, presses Publish inside
+   * the debounce window, and the invitation goes live **without the
+   * photograph** — no error, the edit still queued, the indicator still
+   * spinning. Any edit made within a second and a half of acting was exposed,
+   * which is most of them.
+   */
+  it('waits for the save in flight and still sends what was queued behind it', async () => {
+    const requests: SaveRequest[] = [];
+    const gate: { resolve?: (response: SaveResponse) => void } = {};
+    let call = 0;
+
+    const slow: AutosaveTransport = {
+      save: (request) => {
+        requests.push(request);
+        call += 1;
+        // Only the first request is held open; the rest answer at once.
+        if (call === 1) return new Promise<SaveResponse>((resolve) => (gate.resolve = resolve));
+        return Promise.resolve({ kind: 'saved', version: 3, savedAt: NOW } as SaveResponse);
+      },
+    };
+
+    const clock = harness();
+    const engine = new AutosaveEngine({
+      transport: slow,
+      initialDocument: structuredClone(DOCUMENT),
+      initialVersion: 1,
+      setTimer: clock.setTimer,
+      clearTimer: clock.clearTimer,
+      now: clock.now,
+    });
+
+    // A first edit, sent and left in flight — the autosave a person's typing
+    // started a moment ago.
+    engine.edit([replace('/content/couple/groomName', 'أحمد')]);
+    const firstSave = engine.flush();
+
+    // The photograph, added while that save is still open.
+    engine.edit([replace('/content/couple/brideName', 'سارة')]);
+
+    // …and Publish pressed. This is the call that must not return early.
+    const publishFlush = engine.flush();
+    gate.resolve?.({ kind: 'saved', version: 2, savedAt: NOW });
+    await Promise.all([firstSave, publishFlush]);
+
+    expect(engine.pendingCount(), 'an edit was still queued after flush resolved').toBe(0);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.patch.map((operation) => operation.path)).toEqual([
+      '/content/couple/brideName',
+    ]);
+  });
 });
 
 describe('vi is available for spies', () => {

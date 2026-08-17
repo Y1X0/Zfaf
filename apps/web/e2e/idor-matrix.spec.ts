@@ -508,15 +508,19 @@ const MATRIX: readonly RouteExpectation[] = [
     route: 'v1/invitations',
     method: 'POST',
     path: () => '/api/v1/invitations',
-    // No such template, so the handler answers 404 — which is an *allowed*
-    // verdict here: the request reached the handler, which is all this row
-    // claims. Using a real template key would create rows on five actors.
-    body: {
-      templateKey: 'no-such-template-for-the-matrix',
-      title: 'IDOR matrix',
-      eventDate: '2027-01-01',
-      locale: 'ar',
-    },
+    /**
+     * A deliberately empty title, so the handler answers **400**.
+     *
+     * This row is about the guard, not about creating anything: 400 means the
+     * request got past authorization and into the use case, which is exactly
+     * what `allowed` claims here, and nothing is written for any actor.
+     *
+     * A missing *template* would have been the obvious way to do this and is
+     * wrong — it answers 404, and 404 is a `denied` verdict in this matrix
+     * (it is the preferred answer for "not yours"). The title is checked
+     * before the template is looked up, which is what makes this reliable.
+     */
+    body: { templateKey: 'classic-luxury', title: '', eventDate: '2027-01-01', locale: 'ar' },
     expect: {
       anonymous: 'denied',
       stranger: 'allowed',

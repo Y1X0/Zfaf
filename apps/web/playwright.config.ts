@@ -129,16 +129,55 @@ function localWebServer() {
       // sharing them would make a routine session-secret rotation invalidate
       // every enrolled authenticator (docs/09 §2.8).
       TOTP_ENCRYPTION_KEY: 'e2e-totp-encryption-key-at-least-32-characters-long',
-      // `s3` rather than `minio`, because the config layer refuses a local
-      // development driver in production and it is right to. Nothing in this
-      // suite uploads, so the endpoint is never reached.
+      /**
+       * `s3` rather than `minio`, because the config layer refuses a local
+       * development driver in production and it is right to.
+       *
+       * The endpoint is the harness's own object sink on `PORT + 3`
+       * (`start-standalone.mjs`), which exists so the media journey can be
+       * tested at all — the middle stage of an upload is a `PUT` from the
+       * browser straight to the bucket, and without somewhere for it to land
+       * there is nothing to test. Only the *bucket* is substituted: the
+       * signing, the `PUT`, the `HEAD` size check, the queue and the worker
+       * are all the real ones.
+       *
+       * The AWS SDK addresses an **IP** endpoint path-style on its own, so
+       * `host/bucket/key` is what the sink receives and no DNS is needed.
+       *
+       * None of this says anything about Cloudflare R2, which is verified
+       * against R2 or not at all.
+       */
       STORAGE_DRIVER: 's3',
-      STORAGE_ENDPOINT: 'http://127.0.0.1:9000',
+      STORAGE_ENDPOINT: `http://127.0.0.1:${PORT + 3}`,
       STORAGE_REGION: 'auto',
       STORAGE_BUCKET_MEDIA: 'zfaf-media',
       STORAGE_ACCESS_KEY_ID: 'e2e',
       STORAGE_SECRET_ACCESS_KEY: 'e2e-secret',
-      STORAGE_PUBLIC_BASE_URL: 'http://127.0.0.1:9000/zfaf-media',
+      /**
+       * The bucket's **public face**, through the TLS terminator — not the
+       * sink's own port.
+       *
+       * The renderer refuses a media URL that is not `https:` (`safeMediaUrl`,
+       * and the public page's CSP says the same). Pointing this at plain HTTP
+       * published a page with the photograph silently dropped, which is the
+       * renderer behaving correctly and the harness lying. Production has the
+       * same shape: `cdn.zfaf.app` in front of R2, never R2's raw address.
+       */
+      STORAGE_PUBLIC_BASE_URL: `${baseURL}/zfaf-media`,
+      // The media worker runs alongside the app: an upload nobody processes
+      // never becomes a photograph, because the document only takes a URL once
+      // the worker reports `ready`.
+      E2E_START_WORKER: '1',
+      /**
+       * The client address the terminator stamps on a request that arrives
+       * without one — which is every request from `journey.spec.ts`. See the
+       * note at the top of that file: a suite that uploads cannot use
+       * Playwright's `extraHTTPHeaders`, because the browser would attach the
+       * header to the cross-origin upload too and the bucket's CORS policy
+       * would refuse it. RFC 5737 documentation range, so it collides with
+       * nothing real and with no other suite.
+       */
+      E2E_CLIENT_ADDRESS: '203.0.113.60',
       /**
        * The real adapter, pointed at a local sink.
        *

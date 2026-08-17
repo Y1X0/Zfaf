@@ -403,7 +403,7 @@ export function Builder({
             ))}
           </nav>
 
-          <StepComponent document={document} builder={builder} />
+          <StepComponent document={document} builder={builder} invitationId={invitationId} />
 
           <div className="zfb__nav">
             <button
