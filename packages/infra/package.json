@@ -14,7 +14,8 @@
     "./qr": "./src/qr/index.ts",
     "./analytics": "./src/analytics/index.ts",
     "./cdn": "./src/cdn/index.ts",
-    "./crypto/cipher": "./src/crypto/aes-gcm-cipher.ts"
+    "./crypto/cipher": "./src/crypto/aes-gcm-cipher.ts",
+    "./observability": "./src/observability/index.ts"
   },
   "scripts": {
     "lint": "eslint .",

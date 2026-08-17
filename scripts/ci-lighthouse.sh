@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# Lighthouse as a required check (D10.3).
+#
+# Measured on a simulated Moto G Power over slow 4G, which is where our
+# visitors actually open these links. Thresholds and metric budgets live in
+# `scripts/lighthouse-public-page.mjs`; this only stands the environment up.
+#
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PORT="${LH_PORT:-3210}"
+BASE="https://127.0.0.1:${PORT}"
+
+# The same complete, non-secret environment `playwright.config.ts` gives the
+# server. `packages/config` refuses to run on a partial environment — which is
+# the behaviour we want in production and therefore the behaviour this has to
+# satisfy honestly rather than relax. Nothing here is a secret; the storage
+# endpoint points nowhere and is never reached.
+export NODE_ENV=production
+export PUBLIC_BASE_URL="$BASE"
+export DATABASE_URL="${DATABASE_URL:-postgresql://zfaf:zfaf_local_dev@127.0.0.1:5432/zfaf?schema=public}"
+export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}"
+export SESSION_SECRET="${SESSION_SECRET:-ci-session-secret-value-at-least-32-characters-long}"
+export TOTP_ENCRYPTION_KEY="${TOTP_ENCRYPTION_KEY:-ci-totp-encryption-key-at-least-32-characters-long}"
+export STORAGE_DRIVER=s3
+export STORAGE_ENDPOINT=http://127.0.0.1:9000
+export STORAGE_REGION=auto
+export STORAGE_BUCKET_MEDIA=zfaf-media
+export STORAGE_ACCESS_KEY_ID=ci
+export STORAGE_SECRET_ACCESS_KEY=ci-secret
+export STORAGE_PUBLIC_BASE_URL=http://127.0.0.1:9000/zfaf-media
+export MAIL_DRIVER=noop
+export MAIL_FROM_ADDRESS=no-reply@zfaf.test
+export DEFAULT_MARKET=SA
+
+cleanup() {
+  local status=$?
+  [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true
+  exit "$status"
+}
+trap cleanup EXIT
+
+SLUG="$(cd "$ROOT/apps/web" && npx tsx e2e/fixtures/seed-one.ts)"
+
+(cd "$ROOT/apps/web" && PORT="$PORT" node scripts/start-standalone.mjs >/tmp/lh-server.log 2>&1) &
+SERVER_PID=$!
+
+for _ in $(seq 1 60); do
+  if curl -sk "${BASE}/api/health" >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+curl -sk "${BASE}/api/health" >/dev/null || { echo "server did not start"; cat /tmp/lh-server.log; exit 1; }
+
+LH_URL="${BASE}/i/${SLUG}" node "$ROOT/scripts/lighthouse-public-page.mjs"

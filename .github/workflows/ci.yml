@@ -55,6 +55,17 @@ jobs:
       - name: Validate shipped template manifests
         run: pnpm template:validate
 
+      # Key parity across catalogues, and zero hard-coded Arabic outside them.
+      # A missing key renders as its own dotted path in front of a customer.
+      - name: i18n catalogues
+        run: pnpm i18n:check
+
+      # Every P0/P1 alert must name a runbook that exists (docs/15 §5). An
+      # alert that wakes somebody and points nowhere trains the team to ignore
+      # alerts, which is worse than having none.
+      - name: Alert definitions
+        run: pnpm alerts:check
+
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
@@ -202,6 +213,10 @@ jobs:
       DATABASE_URL: postgresql://zfaf:zfaf_ci@127.0.0.1:5432/zfaf?schema=public
       REDIS_URL: redis://127.0.0.1:6379
       CI: 'true'
+      # A *different* value from the session secret, as production requires:
+      # sharing them would make a routine session-secret rotation invalidate
+      # every enrolled authenticator (docs/09 §2.8).
+      TOTP_ENCRYPTION_KEY: ci-totp-encryption-key-at-least-32-characters-long
     steps:
       - uses: actions/checkout@v4
 
@@ -245,11 +260,18 @@ jobs:
         env:
           CHROMIUM_PATH: ''
 
-      # The budgets from PRD §4.1, measured rather than estimated: the builder
-      # from the build manifest, the public page from the document it actually
-      # serves (ADR-0020).
+      # The budgets, measured rather than estimated, against the standalone
+      # server the deployment uses. Three surfaces, two separate public budgets
+      # that must not be merged: /i/[slug] ≤ 90 KB (ADR-0020) and the marketing
+      # surface ≤ 144 KB (ADR-0021).
       - name: Performance budgets
-        run: pnpm --filter @zfaf/web bundle:check
+        run: bash scripts/ci-budgets.sh
+
+      # Lighthouse on the published invitation, on a simulated mid-range phone
+      # over slow 4G — the conditions our visitors actually have. A score taken
+      # on CI's hardware would flatter us and predict nothing.
+      - name: Lighthouse (public invitation)
+        run: bash scripts/ci-lighthouse.sh
 
       - uses: actions/upload-artifact@v4
         if: failure()

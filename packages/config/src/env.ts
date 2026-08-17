@@ -68,6 +68,16 @@ export const EnvSchema = z.object({
   CDN_API_TOKEN: z.string().optional(),
 
   SENTRY_DSN: z.string().url().optional(),
+
+  /**
+   * Guards the component detail on `/api/health/deep` (docs/14 §11).
+   *
+   * Optional: without it the probe still answers with an overall verdict, on
+   * the grounds that an unmonitored deployment is worse than a slightly
+   * informative one. With it, "which dependency is down" requires the token —
+   * because that answer is useful to somebody deciding when to attack.
+   */
+  HEALTH_CHECK_TOKEN: z.string().min(16).optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),

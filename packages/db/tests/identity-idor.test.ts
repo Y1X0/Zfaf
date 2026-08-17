@@ -16,6 +16,7 @@ import {
 import { NodeIdGenerator, NodeTokenGenerator } from '@zfaf/infra';
 
 import { PrismaInvitationRepository } from '../src/repositories/invitation.repository.js';
+import { PrismaTwoFactorRepository } from '../src/repositories/two-factor.repository.js';
 import {
   PrismaAuditLogRepository,
   PrismaMembershipRepository,
@@ -111,6 +112,10 @@ function sessionDeps() {
     sessions,
     memberships,
     audit,
+    // Required, not optional (docs/09 §2.8): session resolution computes the
+    // second-factor gate on every request, and a test that omitted the
+    // repository would be exercising a path production does not have.
+    twoFactor: new PrismaTwoFactorRepository(prisma),
     tokens,
     clock: { now: () => new Date() },
   };

@@ -18,6 +18,7 @@ import {
 import { S3StorageProvider } from '@zfaf/infra/storage';
 import { NodeIdGenerator, NodeTokenGenerator } from '@zfaf/infra/crypto/tokens';
 import { AesGcmSecretCipher } from '@zfaf/infra/crypto/cipher';
+import { JsonLogger, LoggingErrorTracker, SentryErrorTracker } from '@zfaf/infra/observability';
 import { NoopMailService } from '@zfaf/infra/mail';
 import { SlidingWindowRateLimiter } from '@zfaf/infra/rate-limit';
 import { RedisAnalyticsBuffer, RedisDailySalt, getRedis } from '@zfaf/infra/analytics';
@@ -26,6 +27,8 @@ import {
   type AnalyticsBuffer,
   type CdnPurger,
   type DailySaltStore,
+  type ErrorTracker,
+  type Logger,
   type MailService,
   NO_CDN_PURGER,
   type RsvpNotification,
@@ -73,6 +76,10 @@ export interface Container {
   readonly ids: NodeIdGenerator;
   readonly rateLimiter: SlidingWindowRateLimiter;
   readonly clock: typeof systemClock;
+  /** Structured logging with a redaction pass that cannot be bypassed (docs/15 §2). */
+  readonly logger: Logger;
+  /** Where an unexpected failure goes (docs/15 §3). Never throws at its caller. */
+  readonly errors: ErrorTracker;
   readonly mail: MailService;
   readonly humanCheck: TurnstileHumanCheck;
   /** Tells an owner a guest replied (D7.7). Never allowed to fail a reply. */
@@ -85,6 +92,13 @@ export function container(): Container {
   const env = getEnv();
   const prisma = getPrismaClient();
   const redis = getRedis(env.REDIS_URL);
+
+  // `debug` is disabled outside development, per docs/15 §2.
+  const logger = new JsonLogger({
+    level: env.NODE_ENV === 'development' ? 'debug' : 'info',
+    service: 'web',
+    env: env.NODE_ENV,
+  });
 
   cached = {
     prisma,
@@ -116,6 +130,8 @@ export function container(): Container {
     ids: new NodeIdGenerator(),
     rateLimiter: new SlidingWindowRateLimiter(),
     clock: systemClock,
+    logger,
+    errors: buildErrorTracker(env.SENTRY_DSN, env.NODE_ENV, logger),
     // The SMTP adapter arrives with the transactional-mail work; until then a
     // notification is dropped rather than pretended, and the `noop` driver is
     // the configured default outside production.
@@ -125,6 +141,22 @@ export function container(): Container {
   };
 
   return cached;
+}
+
+/**
+ * Sentry when a DSN is configured, and the log otherwise (docs/15 §3).
+ *
+ * The fallback writes through the logger rather than discarding, so a
+ * deployment without Sentry still has its errors somewhere. A silent no-op
+ * would make "no errors in Sentry" indistinguishable from "no Sentry".
+ */
+function buildErrorTracker(
+  dsn: string | undefined,
+  environment: string,
+  logger: Logger,
+): ErrorTracker {
+  if (!dsn) return new LoggingErrorTracker(logger);
+  return new SentryErrorTracker({ dsn, environment, logger });
 }
 
 /**

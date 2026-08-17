@@ -1,0 +1,156 @@
+# Alert definitions (docs/15 §5, D10.5).
+#
+# Machine-readable rather than prose, so the rules a monitoring provider runs
+# are the rules in this repository and reviewed with the code. The provider
+# differs by deployment — Better Stack, Grafana, Cloudflare — so this is the
+# neutral source, and `docs/runbooks/` holds the response for each.
+#
+# The rule docs/15 §5 opens with, and the one that governs this whole file:
+# an alert that wakes a human must be actionable. A false alarm trains the
+# team to ignore alerts, which is more dangerous than having none.
+#
+# Every P0 and P1 entry names a runbook. An alert with no runbook is an alert
+# nobody knows what to do about at 3am, and is not permitted here — enforced by
+# `scripts/check-alerts.mjs`.
+
+version: 1
+
+# Where a firing alert goes. The channels themselves are configured in the
+# provider and are an external prerequisite, not something this file creates.
+routes:
+  P0:
+    channel: pager
+    hours: 24/7
+    acknowledge_within: 5m
+  P1:
+    channel: chat
+    hours: business
+    acknowledge_within: 4h
+  P2:
+    channel: dashboard
+    hours: none
+
+alerts:
+  # ── P0: wakes somebody ────────────────────────────────────────────────────
+  - id: site_down
+    severity: P0
+    summary: The site is not answering
+    condition: probe(https://$PUBLIC_HOST/api/health) fails twice consecutively
+    interval: 30s
+    runbook: docs/runbooks/site-down.md
+
+  - id: public_invitations_failing
+    severity: P0
+    summary: Published invitations are not rendering
+    # The most consequential failure in the product: a guest opening a link on
+    # the night of a wedding. Watched separately from the overall error rate
+    # because /i/* is a small share of requests and would be averaged away.
+    condition: error_rate(path=/i/*) > 5% for 3m
+    interval: 1m
+    runbook: docs/runbooks/site-down.md
+
+  - id: database_unreachable
+    severity: P0
+    summary: The database is not accepting connections
+    condition: health_component(database) == down for 2 checks
+    interval: 30s
+    runbook: docs/runbooks/db-down.md
+
+  - id: error_rate_severe
+    severity: P0
+    summary: Server errors across the application
+    condition: error_rate(status=5xx) > 5% for 5m
+    interval: 1m
+    runbook: docs/runbooks/site-down.md
+
+  - id: publish_failing
+    severity: P0
+    summary: Publishing is failing
+    # A commercial incident, not merely a technical one: a customer who cannot
+    # publish cannot send their invitation, and the date does not move.
+    condition: rate(publish.success) / rate(publish.attempt) < 90% for 10m
+    interval: 1m
+    runbook: docs/runbooks/rollback.md
+
+  - id: privilege_escalation_suspected
+    severity: P0
+    summary: Unusual administrative activity
+    # Any of: a role change, a second-factor removal attempt, or admin reads
+    # far above the daily norm. All three are in the audit log by construction.
+    condition: >
+      count(audit.action in [admin.role_changed, two_factor.disable_refused]) > 0
+      or count(audit.action ~ 'admin.') > 5x daily_median
+    interval: 5m
+    runbook: docs/runbooks/data-breach.md
+
+  # ── P1: told during business hours ────────────────────────────────────────
+  - id: rsvp_failing
+    severity: P1
+    summary: Guests are failing to reply
+    condition: error_rate(path=/api/public/invitations/*/rsvp) > 10% for 10m
+    interval: 5m
+    runbook: docs/runbooks/site-down.md
+
+  - id: media_upload_failing
+    severity: P1
+    summary: Image uploads are failing
+    condition: rate(media.upload.failed) / rate(media.upload.attempt) > 20% for 15m
+    interval: 5m
+    runbook: docs/runbooks/site-down.md
+
+  - id: job_queue_backed_up
+    severity: P1
+    summary: The job queue is not draining
+    condition: queue_depth > 1000 for 15m
+    interval: 5m
+    runbook: docs/runbooks/site-down.md
+
+  - id: lcp_regression
+    severity: P1
+    summary: The public page has become slow for real users
+    # Field data, not Lighthouse: our visitors' phones are slower than CI's.
+    condition: p75(rum.lcp, page=invitation) > 3s for 1h
+    interval: 15m
+    runbook: docs/runbooks/site-down.md
+
+  - id: disk_pressure
+    severity: P1
+    summary: Disk is filling
+    condition: disk_used_percent > 80
+    interval: 5m
+    runbook: docs/runbooks/db-down.md
+
+  - id: backup_missing
+    severity: P1
+    summary: No successful backup in the last 24 hours
+    # The alert that matters most on the day nothing else is wrong: a backup
+    # nobody noticed had stopped is discovered during the restore.
+    condition: time_since(backup.succeeded) > 26h
+    interval: 1h
+    runbook: docs/runbooks/restore-backup.md
+
+  - id: error_tracking_unconfigured
+    severity: P1
+    summary: Errors have nowhere to go
+    condition: health_component(error_tracking) != ok
+    interval: 15m
+    runbook: docs/runbooks/site-down.md
+
+  # ── P2: dashboard only ────────────────────────────────────────────────────
+  - id: cost_anomaly
+    severity: P2
+    summary: Daily spend above the trailing median
+    condition: cost_per_day > 2x trailing_7d_median
+    interval: 1d
+
+  - id: rate_limit_pressure
+    severity: P2
+    summary: Rate limiting is engaging more than usual
+    condition: rate(http.429) > 3x trailing_7d_median
+    interval: 1h
+
+  - id: storage_growth
+    severity: P2
+    summary: Object storage growing faster than usual
+    condition: storage_bytes_growth_7d > 2x trailing_median
+    interval: 1d
