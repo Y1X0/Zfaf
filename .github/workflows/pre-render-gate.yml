@@ -1,0 +1,115 @@
+# The gate that must close before anything is provisioned (docs/22 §4).
+#
+# It exists as its own workflow, triggered by hand, for two reasons. It builds
+# two full images and starts them, which is minutes rather than seconds; and it
+# is a *decision point* rather than a regression check — the whole design of
+# this deployment puts a human in front of production (docs/14 §4), and a gate
+# that runs itself on every push is a gate nobody reads.
+#
+# What it does NOT do: create a Render service, a database, a key-value store,
+# a secret, a DNS record, or anything at all outside this runner. It builds
+# images and talks to containers on localhost.
+#
+# The reason it runs here rather than in the development sandbox is narrow and
+# worth stating: that sandbox's egress refuses Docker Hub's layer CDN and every
+# Debian mirror, so `FROM node:22-bookworm-slim` cannot resolve and `apt-get`
+# cannot run. Nothing about the images was changed to work around it — the
+# gate was recorded as BLOCKED instead, and this runs the same command on a
+# machine that has ordinary network access.
+name: Pre-Render gate
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pre-render-gate
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  docker-smoke:
+    name: Build the images and prove they work
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zfaf
+          POSTGRES_PASSWORD: zfaf_ci
+          POSTGRES_DB: zfaf
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U zfaf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Local to the runner, which is what `docker-smoke.sh` insists on: it
+      # registers accounts and runs sweeps, so it refuses any database that is
+      # not local. Nothing here is a credential.
+      DATABASE_URL: postgresql://zfaf:zfaf_ci@127.0.0.1:5432/zfaf?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @zfaf/db db:generate
+
+      # The schema has to exist before the smoke seeds an invitation against
+      # it. The worker image runs `migrate deploy` itself later — that step is
+      # one of the twelve checks, and it is idempotent, so doing it here first
+      # does not weaken it.
+      - name: Apply migrations
+        run: pnpm --filter @zfaf/db db:deploy
+
+      # Recorded before the build so the log says exactly which bytes were
+      # built. A gate whose inputs are not identifiable proves nothing later.
+      - name: Record what is being built
+        run: |
+          git rev-parse HEAD
+          sha256sum infra/docker/web.Dockerfile infra/docker/worker.Dockerfile
+          git status --porcelain infra/docker/ || true
+
+      # The command, unmodified. No substitute base image, no skipped layer,
+      # no relaxed assertion. Twelve checks and an exit code.
+      - name: pnpm docker:smoke
+        run: pnpm docker:smoke
+
+      - name: Image sizes
+        if: success()
+        run: docker images zfaf-web:smoke zfaf-worker:smoke
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          echo '── web ──'
+          docker logs zfaf-web-smoke 2>&1 | tail -60 || true
+          echo '── worker ──'
+          docker logs zfaf-worker-smoke 2>&1 | tail -60 || true
