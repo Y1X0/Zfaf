@@ -21,6 +21,7 @@ export * from './invitation/domain/draft-document.js';
 export * from './invitation/domain/snapshot-checksum.js';
 export * from './invitation/domain/resolve-document.js';
 export * from './invitation/domain/public-access.js';
+export * from './invitation/usecases/create-invitation.js';
 export * from './invitation/usecases/update-draft.js';
 export * from './invitation/usecases/publish-invitation.js';
 export * from './invitation/usecases/manage-publication.js';
@@ -51,6 +52,7 @@ export * from './template/domain/theme.js';
 export * from './template/domain/section.js';
 export * from './template/domain/template-manifest.js';
 export * from './template/domain/manifest-migrations.js';
+export * from './template/ports/template-catalog.js';
 
 // ── billing (ADR-0008, ADR-0014) ────────────────────────────────────────────
 export * from './billing/domain/money.js';
