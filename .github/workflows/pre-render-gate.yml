@@ -102,9 +102,15 @@ jobs:
       - name: pnpm docker:smoke
         run: pnpm docker:smoke
 
+      # One repository per invocation — `docker images` takes at most one
+      # argument, and passing two made this step fail *after* the gate had
+      # already printed twelve passing checks. A reporting line that can fail
+      # the job it is reporting on is worse than no reporting line.
       - name: Image sizes
         if: success()
-        run: docker images zfaf-web:smoke zfaf-worker:smoke
+        run: |
+          docker image ls zfaf-web:smoke
+          docker image ls zfaf-worker:smoke
 
       - name: Container logs on failure
         if: failure()
