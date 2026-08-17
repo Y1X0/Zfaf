@@ -178,7 +178,14 @@ fi
 # The public page and its preview card. The card is rasterised from a font read
 # at runtime, which nothing statically references — so this is the check that
 # the file tracer carried it into the image.
-if slug=$(cd "$ROOT/apps/web" && npx tsx e2e/fixtures/seed-one.ts 2>/dev/null | tail -1) && [ -n "$slug" ]; then
+# `pnpm --filter @zfaf/db exec tsx`, not `npx tsx`. The package that declares
+# tsx is the one that can run it: on a fresh `--frozen-lockfile` install there
+# is no `tsx` on any `.bin` path above apps/web, so `npx` would try to fetch it
+# from the registry mid-check. That is how this failed on a runner while
+# passing locally, where an earlier install had left a binary lying around.
+seed_output="$(pnpm --filter @zfaf/db exec tsx "$ROOT/apps/web/e2e/fixtures/seed-one.ts" 2>&1 || true)"
+slug="$(tail -1 <<<"$seed_output")"
+if [ -n "$slug" ] && [[ "$slug" != *' '* ]]; then
   [ "$(code -H 'Host: zfaf.app' "http://127.0.0.1:$WEB_PORT/i/$slug")" = 200 ] \
     && pass "serves a published invitation" || fail "the published invitation is not served"
   og_type=$(curl -s -o /dev/null -w '%{content_type}' --max-time 30 -H 'Host: zfaf.app' "http://127.0.0.1:$WEB_PORT/i/$slug/og")
@@ -186,7 +193,10 @@ if slug=$(cd "$ROOT/apps/web" && npx tsx e2e/fixtures/seed-one.ts 2>/dev/null | 
     && pass "rasterises the preview card (the Arabic font is in the image)" \
     || fail "the preview card came back as '$og_type'"
 else
+  # The reason, not just the verdict. A check that cannot say why it failed
+  # sends the next person to guess.
   fail "could not seed a published invitation to test against"
+  tail -5 <<<"$seed_output" | sed 's/^/      /'
 fi
 
 # ── The worker ─────────────────────────────────────────────────────────────

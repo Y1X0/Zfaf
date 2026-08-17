@@ -50,7 +50,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Seeding one published invitation to measure…"
-SLUG="$(cd "$ROOT/apps/web" && npx tsx e2e/fixtures/seed-one.ts)"
+SLUG="$(pnpm --filter @zfaf/db exec tsx "$ROOT/apps/web/e2e/fixtures/seed-one.ts")"
 echo "  slug: $SLUG"
 
 echo "Starting the standalone server on ${PORT}…"

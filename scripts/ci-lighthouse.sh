@@ -47,7 +47,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SLUG="$(cd "$ROOT/apps/web" && npx tsx e2e/fixtures/seed-one.ts)"
+SLUG="$(pnpm --filter @zfaf/db exec tsx "$ROOT/apps/web/e2e/fixtures/seed-one.ts")"
 
 (cd "$ROOT/apps/web" && PORT="$PORT" node scripts/start-standalone.mjs >/tmp/lh-server.log 2>&1) &
 SERVER_PID=$!
