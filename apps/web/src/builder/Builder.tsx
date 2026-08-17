@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
 
 import {
@@ -119,6 +119,46 @@ export function Builder({
     }, window.location.origin);
   }
 
+  /**
+   * Marks the frame reachable and replays the current document into it.
+   *
+   * Called from **both** signals that say a frame is listening, because
+   * neither is reliable alone:
+   *
+   *   • `preview:ready` — the child announces once, as its script runs. If it
+   *     announces before React has attached the listener below, that
+   *     announcement is gone and no other is coming.
+   *   • the iframe's `load` event — fires after the child's script has
+   *     executed, so its listener exists by then. It may arrive before the
+   *     announcement or after.
+   *
+   * Whichever arrives first does the work and the other repeats it. Repeating
+   * is free: the message replaces the frame's whole document, so sending it
+   * twice leaves exactly the state sending it once would.
+   *
+   * The earlier design used `load` as a *negative* signal — it revoked
+   * readiness so anything sent during a reload would be buffered. That is the
+   * wrong direction for a one-shot announcement: when `load` landed after the
+   * announcement it revoked a readiness nothing would ever repeat, every later
+   * edit queued against a frame the parent thought was deaf, and the preview
+   * froze with no way back but a reload. A couple would have watched their
+   * invitation stop responding mid-sentence.
+   *
+   * Both intermittent failures this suite showed — a name that never appeared,
+   * then a palette that never changed — were that frozen preview, reached by
+   * the two different orderings.
+   */
+  const attachToFrame = (): void => {
+    channel.current?.markReady();
+    if (latestDocument.current) {
+      channel.current?.send({
+        type: 'doc:replace',
+        document: latestDocument.current,
+        version: initialVersion,
+      });
+    }
+  };
+
   /** Listens for the frame reporting ready, and for section clicks. */
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -130,34 +170,31 @@ export function Builder({
       if (!message) return;
 
       if (message.type === 'preview:ready') {
-        channel.current?.markReady();
+        attachToFrame();
         /**
-         * And re-send, unconditionally.
+         * And re-send, unconditionally. This is what makes the preview
+         * self-healing, and it is why nothing revokes readiness any more.
          *
-         * `markReady` flushes what was buffered, which is not enough on its
-         * own. The frame can announce readiness *before* the parent's `load`
-         * handler runs — the child posts as soon as its script executes — and
-         * `onFrameLoad` then calls `markNotReady()`, discarding the flag that
-         * had just been set. Nothing re-announces, so every later edit is
-         * buffered against a frame the parent believes is not listening, and
-         * the preview silently stops updating.
+         * The frame announces readiness as soon as its script executes, which
+         * can be *before* the parent's `load` handler runs. That handler used
+         * to call `markNotReady()`, and when the two arrived in that order it
+         * revoked a readiness nothing would ever announce again: every later
+         * edit was then queued against a frame the parent believed was not
+         * listening, and the preview froze — silently, with no way back but a
+         * reload. A couple would have watched their invitation stop responding
+         * after the first keystroke.
          *
-         * Found by the desktop suite failing only when it ran after ~200 other
-         * tests: load shifts the ordering, it does not create it. A couple
-         * would have seen a preview that froze after the first keystroke and
-         * had no way to recover but reload.
+         * The first attempt at this added the re-send below but kept the
+         * revocation, which fixed the case where the edits came first and left
+         * the case where they came second. Removing the revocation closes both:
+         * the child announces after every load, and every announcement replaces
+         * the whole document, so a message posted into a frame that was still
+         * navigating is repaired rather than mourned. Readiness now only ever
+         * moves forward, from the side that actually knows.
          *
-         * Sending here is idempotent — the frame replaces its whole document —
-         * so it costs one message and closes the race from the side that
-         * actually knows the current state.
+         * Found by the desktop suite failing when it ran after ~200 other
+         * tests. Load shifts the ordering; it does not create it.
          */
-        if (latestDocument.current) {
-          channel.current?.send({
-            type: 'doc:replace',
-            document: latestDocument.current,
-            version: initialVersion,
-          });
-        }
         return;
       }
       if (message.type === 'section:click') {
@@ -193,11 +230,6 @@ export function Builder({
       version: initialVersion,
     });
   }, [builder.document, initialVersion]);
-
-  const onFrameLoad = useCallback(() => {
-    // A reload means anything already sent is gone; buffer until it speaks.
-    channel.current?.markNotReady();
-  }, []);
 
   /** Ctrl/⌘+Z and Ctrl/⌘+Shift+Z, the shortcuts people already know. */
   useEffect(() => {
@@ -446,12 +478,12 @@ export function Builder({
             <div className="zfb-preview__stage">
               <iframe
                 ref={frame}
+                onLoad={attachToFrame}
                 className="zfb-preview__frame"
                 data-device={device}
                 data-testid="preview-frame"
                 title={t('shell.previewTitle')}
                 src={`/preview/${invitationId}`}
-                onLoad={onFrameLoad}
                 // The preview is same-origin so the bridge works, and sandboxed
                 // so a template cannot navigate the builder or open a window.
                 sandbox="allow-same-origin allow-scripts"

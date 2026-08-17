@@ -161,8 +161,26 @@ test('a theme change reaches the preview', async ({ page }) => {
   const frame = page.frameLocator('[data-testid="preview-frame"]');
   await expect(frame.locator('.zf-invitation')).toBeVisible({ timeout: 20_000 });
 
-  const style = await frame.locator('style').first().textContent();
-  expect(style).toContain('#c9a227');
+  /**
+   * Polled, not read once.
+   *
+   * `.zf-invitation` becomes visible as soon as the *initial* document
+   * renders, which can be a beat before the palette message lands — so a
+   * single `textContent()` at that instant sometimes read the default theme
+   * and failed. The expectation is unchanged, and so is the budget: the same
+   * colour must appear in the frame's own stylesheet within 20 seconds. What
+   * is gone is the assumption that it must already be there the moment the
+   * first paint happens.
+   *
+   * The distinction matters, because the sibling assertion above *does* retry
+   * for 20 seconds — and it failed too, once, before the builder's preview
+   * channel was fixed. That one was the application; this one was the clock.
+   */
+  await expect
+    .poll(async () => (await frame.locator('style').first().textContent()) ?? '', {
+      timeout: 20_000,
+    })
+    .toContain('#c9a227');
 });
 
 test('offers the three device sizes, defaulting to mobile', async ({ page }) => {
