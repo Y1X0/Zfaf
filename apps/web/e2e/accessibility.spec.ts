@@ -189,3 +189,74 @@ test('the replies dashboard has no serious accessibility violations', async ({
   );
   expect(blocking.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
 });
+
+/**
+ * The pages a customer meets first (docs/23 §7).
+ *
+ * Checked as a group rather than one test each: they share a frame and a
+ * stylesheet, so a contrast or label failure would be the same failure four
+ * times, and naming the page in the assertion message is enough to find it.
+ *
+ * These matter for the same reason the public page does. Somebody who cannot
+ * use the sign-in form cannot reach any of the accessible pages behind it —
+ * an inaccessible front door makes the whole product inaccessible, however
+ * careful everything past it is.
+ */
+test.describe('the auth pages', () => {
+  const PAGES = [
+    { path: '/register', ready: 'register-form' },
+    { path: '/login', ready: 'login-form' },
+    { path: '/forgot-password', ready: 'forgot-form' },
+    // With a token, so the form renders rather than the "link expired" notice.
+    { path: '/reset-password?token=not-a-real-token', ready: 'reset-form' },
+  ] as const;
+
+  for (const surface of PAGES) {
+    test(`${surface.path} has no serious accessibility violations`, async ({ page }) => {
+      await page.goto(surface.path);
+      await expect(page.getByTestId(surface.ready)).toBeVisible();
+      await settled(page);
+
+      const results = await new AxeBuilder({ page }).withTags(STANDARD).analyze();
+      const blocking = results.violations.filter(
+        (violation) => violation.impact === 'serious' || violation.impact === 'critical',
+      );
+      expect(
+        blocking.map((violation) => `${violation.id}: ${violation.help}`),
+        `on ${surface.path}`,
+      ).toEqual([]);
+    });
+  }
+});
+
+test('the dashboard has no serious accessibility violations', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const seeded = await seedPublished();
+  await context.addCookies([
+    {
+      name: '__Host-zfaf_session',
+      value: seeded.sessionToken,
+      url: baseURL ?? 'https://127.0.0.1:3100',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ]);
+
+  await page.goto('/dashboard');
+  await expect(page.getByTestId('invitation-list')).toBeVisible();
+  // The create form is opened, because a collapsed form is not a form anyone
+  // has to be able to use — and the fields inside it are.
+  await page.getByTestId('new-invitation').click();
+  await expect(page.getByTestId('new-invitation-form')).toBeVisible();
+  await settled(page);
+
+  const results = await new AxeBuilder({ page }).withTags(STANDARD).analyze();
+  const blocking = results.violations.filter(
+    (violation) => violation.impact === 'serious' || violation.impact === 'critical',
+  );
+  expect(blocking.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
+});

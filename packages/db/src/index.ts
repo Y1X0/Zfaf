@@ -15,3 +15,7 @@ export * from './repositories/analytics.repository.js';
 export * from './repositories/admin.repository.js';
 export * from './repositories/two-factor.repository.js';
 export * from './repositories/template.repository.js';
+// The shipped manifests → database rows. Exported because the development seed
+// and the e2e fixtures both need it, and a suite that starts from an empty
+// database must be able to put the library there itself.
+export * from './template-sync.js';

@@ -10,7 +10,7 @@ import {
   snapshotChecksum,
 } from '@zfaf/core';
 import { AesGcmSecretCipher } from '@zfaf/infra/crypto/cipher';
-import { PrismaAnalyticsRepository, getPrismaClient } from '@zfaf/db';
+import { PrismaAnalyticsRepository, getPrismaClient, syncTemplates } from '@zfaf/db';
 import { RedisAnalyticsBuffer, getRedis } from '@zfaf/infra/analytics';
 
 /**
@@ -404,6 +404,28 @@ export async function seedPublished(options: SeedPublishedOptions = {}): Promise
   });
 
   return { ...seeded, slug, versionId };
+}
+
+/**
+ * Puts the shipped template library in the database.
+ *
+ * The journey suite needs it and cannot assume it: it starts from nothing, and
+ * the whole point of that suite is that a customer's path works from an empty
+ * database. Trusting that somebody ran `db:templates` first would reintroduce
+ * exactly the hidden dependency it exists to catch — and did catch: the seed
+ * used to write placeholder manifests that the catalogue correctly refused to
+ * offer, so the dashboard showed no templates and nobody could create anything.
+ *
+ * Idempotent, so calling it in a `beforeAll` costs one query per template on a
+ * database that already has them.
+ */
+export async function ensureTemplates(): Promise<number> {
+  const report = await syncTemplates(prismaClient());
+  if (report.refused.length > 0) {
+    // Loud rather than "no templates offered" three screens later.
+    throw new Error(`template sync refused: ${JSON.stringify(report.refused)}`);
+  }
+  return report.created.length + report.unchanged.length + report.updated.length;
 }
 
 /**

@@ -1,6 +1,11 @@
 import { type Page, expect, test } from '@playwright/test';
 
-import { cleanupSeeded, latestVerificationToken, userByEmail } from './fixtures/seed.js';
+import {
+  cleanupSeeded,
+  ensureTemplates,
+  latestVerificationToken,
+  userByEmail,
+} from './fixtures/seed.js';
 
 /**
  * The whole journey, driven by a person (docs/23 §7.5).
@@ -111,6 +116,22 @@ async function photograph(page: Page): Promise<Buffer> {
   return Buffer.from(base64, 'base64');
 }
 
+/**
+ * The template library, put there by this suite rather than assumed.
+ *
+ * It starts from an empty database on purpose, and a customer cannot create an
+ * invitation without a published template to pin to. Assuming somebody had run
+ * `db:templates` would reintroduce the hidden dependency this suite exists to
+ * catch — and did catch: the development seed wrote placeholder manifests the
+ * catalogue rightly refused, so the dashboard offered nothing.
+ */
+test.beforeAll(async () => {
+  const count = await ensureTemplates();
+  expect(count, 'no templates were published, so nobody can create an invitation').toBeGreaterThan(
+    0,
+  );
+});
+
 test.afterAll(async () => {
   await cleanupSeeded();
 });
@@ -177,6 +198,12 @@ test('a couple signs up, builds an invitation, publishes it, and a guest replies
   // ── 4. create an invitation ───────────────────────────────────────────────
 
   await page.getByTestId('new-invitation').click();
+  // Named before it is used: an empty list here is a data problem, and it would
+  // otherwise surface as a navigation that never happens.
+  await expect(
+    page.getByTestId('new-template').locator('option'),
+    'the create form offers no template',
+  ).not.toHaveCount(0);
   await page.getByTestId('new-title').fill('زفاف تجريبي');
   await page.getByTestId('new-date').fill('2027-05-20');
   await page.getByTestId('new-submit').click();

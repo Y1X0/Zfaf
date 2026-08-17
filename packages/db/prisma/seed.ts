@@ -2,13 +2,32 @@ import { randomUUID } from 'node:crypto';
 
 import { PrismaClient } from '@prisma/client';
 
+import { syncTemplates } from '../src/template-sync.js';
+
 /**
  * Development seed.
  *
  * Creates the minimum needed to exercise the system locally: the free plan,
- * reserved slugs, and a verified user. Templates are seeded as records only —
- * the manifests and the renderer arrive in M3, so the rows here carry the
- * identity and version pinning that M1 owns, not the visual definition.
+ * reserved slugs, a verified user — and **the real template library**.
+ *
+ * ## Why the templates come from `syncTemplates`
+ *
+ * This file used to write three template rows of its own, `status: 'draft'`,
+ * with `manifest: { schemaVersion, key, version }` and
+ * `manifestChecksum: 'pending-m3'`, under a comment saying the real manifest
+ * would land in M3.
+ *
+ * M3 landed. Nobody came back here. So a freshly seeded database held three
+ * templates that were **draft** (invisible to the catalogue, which only offers
+ * published ones) carrying manifests that **do not parse** (so the catalogue
+ * would skip them even if they were published). Nothing failed: there was no
+ * way to create an invitation at all, so nothing ever asked for a template.
+ *
+ * Now that a customer can create one, the same state means a signed-up
+ * customer opens the dashboard, finds an empty template list, and cannot start.
+ * The seed reads the shipped manifests instead — the same code path a deploy
+ * uses — so "the library is present" is true by construction rather than by
+ * somebody remembering a second command.
  */
 
 const prisma = new PrismaClient();
@@ -34,34 +53,6 @@ const RESERVED_SLUGS: ReadonlyArray<readonly [string, string]> = [
   ['mail', 'infrastructure hostname'],
   ['null', 'reads as a bug in a URL'],
   ['undefined', 'reads as a bug in a URL'],
-];
-
-const TEMPLATES: ReadonlyArray<{
-  key: string;
-  name: { ar: string; en: string };
-  category: string;
-  planLevel: number;
-}> = [
-  {
-    key: 'classic-luxury',
-    name: { ar: 'الفخامة الكلاسيكية', en: 'Classic Luxury' },
-    category: 'classic',
-    planLevel: 0,
-  },
-  {
-    key: 'royal-gold',
-    name: { ar: 'الملكي الذهبي', en: 'Royal Gold' },
-    category: 'classic',
-    planLevel: 1,
-  },
-  // Deliberately unlike the other two. It is the health check for the template
-  // engine in M3: if it needs renderer changes, the design is wrong (ADR-0004).
-  {
-    key: 'minimal-white',
-    name: { ar: 'الأبيض البسيط', en: 'Minimal White' },
-    category: 'minimal',
-    planLevel: 0,
-  },
 ];
 
 async function main(): Promise<void> {
@@ -99,41 +90,22 @@ async function main(): Promise<void> {
     });
   }
 
-  for (const [index, template] of TEMPLATES.entries()) {
-    const existing = await prisma.template.findUnique({ where: { key: template.key } });
-    if (existing) continue;
-
-    const templateId = randomUUID();
-    const versionId = randomUUID();
-
-    await prisma.template.create({
-      data: {
-        id: templateId,
-        key: template.key,
-        nameI18n: template.name,
-        descriptionI18n: { ar: '', en: '' },
-        category: template.category,
-        requiredPlanLevel: template.planLevel,
-        status: 'draft', // Published in M3, once a manifest exists.
-        sortOrder: index,
-      },
-    });
-
-    await prisma.templateVersion.create({
-      data: {
-        id: versionId,
-        templateId,
-        version: 1,
-        // The real manifest lands in M3; this is the version row invitations pin to.
-        manifest: { schemaVersion: 1, key: template.key, version: 1 },
-        manifestChecksum: 'pending-m3',
-      },
-    });
-
-    await prisma.template.update({
-      where: { id: templateId },
-      data: { currentVersionId: versionId },
-    });
+  /**
+   * The shipped template library, from the manifests themselves.
+   *
+   * Idempotent, and it refuses rather than rewrites: an existing version whose
+   * content changed is reported, not overwritten, because invitations pin to
+   * that row for life (ADR-0005). A database seeded before this change carries
+   * the old `pending-m3` placeholder at version 1 and will be refused here —
+   * correctly. Those rows have to be removed deliberately, by someone who has
+   * checked that no invitation pins to them; a seed script must not decide that.
+   */
+  const templates = await syncTemplates(prisma);
+  for (const refusal of templates.refused) {
+    console.error(`[seed] template refused — ${refusal.key}: ${refusal.reason}`);
+  }
+  if (templates.refused.length > 0) {
+    process.exitCode = 1;
   }
 
   const devEmail = 'dev@zfaf.test';
@@ -151,7 +123,11 @@ async function main(): Promise<void> {
     },
   });
 
-  console.warn('[seed] plans, reserved slugs, templates and a dev user are in place');
+  console.warn(
+    `[seed] plans, reserved slugs, a dev user and ${
+      templates.created.length + templates.unchanged.length + templates.updated.length
+    } published template(s) are in place`,
+  );
 }
 
 main()
