@@ -20,6 +20,7 @@ import {
   readJsonBody,
   unauthorized,
 } from '../../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../../server/origin.js';
 
 /**
  * Publication (D6.2, D6.3).
@@ -40,6 +41,10 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActor();
   if (!session.authenticated) return unauthorized();
 
@@ -159,6 +164,10 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActor();
   if (!session.authenticated) return unauthorized();
 
@@ -194,9 +203,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActor();
   if (!session.authenticated) return unauthorized();
 

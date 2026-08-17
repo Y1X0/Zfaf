@@ -9,6 +9,7 @@ import {
   rateLimited,
   readJsonBody,
 } from '../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../server/origin.js';
 
 /**
  * `PATCH /api/public/rsvps/{id}` — a guest correcting their own reply (D7.4).
@@ -37,6 +38,10 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const { id } = await context.params;
   const deps = container();
   const ipHash = await clientIpHash();

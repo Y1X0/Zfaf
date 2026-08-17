@@ -104,6 +104,14 @@ export function Builder({
 
   const frame = useRef<HTMLIFrameElement | null>(null);
   const channel = useRef<PreviewChannel | null>(null);
+  /**
+   * The document as the frame should currently see it.
+   *
+   * A ref rather than the state value, so the message listener can read the
+   * latest document without being re-registered on every keystroke — and
+   * re-registering it is itself a way to drop a message that arrives in the gap.
+   */
+  const latestDocument = useRef<typeof builder.document>(null);
 
   if (!channel.current && typeof window !== 'undefined') {
     channel.current = new PreviewChannel((message, targetOrigin) => {
@@ -123,6 +131,33 @@ export function Builder({
 
       if (message.type === 'preview:ready') {
         channel.current?.markReady();
+        /**
+         * And re-send, unconditionally.
+         *
+         * `markReady` flushes what was buffered, which is not enough on its
+         * own. The frame can announce readiness *before* the parent's `load`
+         * handler runs — the child posts as soon as its script executes — and
+         * `onFrameLoad` then calls `markNotReady()`, discarding the flag that
+         * had just been set. Nothing re-announces, so every later edit is
+         * buffered against a frame the parent believes is not listening, and
+         * the preview silently stops updating.
+         *
+         * Found by the desktop suite failing only when it ran after ~200 other
+         * tests: load shifts the ordering, it does not create it. A couple
+         * would have seen a preview that froze after the first keystroke and
+         * had no way to recover but reload.
+         *
+         * Sending here is idempotent — the frame replaces its whole document —
+         * so it costs one message and closes the race from the side that
+         * actually knows the current state.
+         */
+        if (latestDocument.current) {
+          channel.current?.send({
+            type: 'doc:replace',
+            document: latestDocument.current,
+            version: initialVersion,
+          });
+        }
         return;
       }
       if (message.type === 'section:click') {
@@ -137,7 +172,10 @@ export function Builder({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, []);
+    // `initialVersion` is fixed for the lifetime of the builder, and the
+    // document is read through a ref so this listener is registered once —
+    // re-registering it on every keystroke would drop messages in the gap.
+  }, [initialVersion]);
 
   /**
    * Pushes the document into the frame whenever it changes.
@@ -148,6 +186,7 @@ export function Builder({
    */
   useEffect(() => {
     if (!builder.document) return;
+    latestDocument.current = builder.document;
     channel.current?.send({
       type: 'doc:replace',
       document: builder.document,

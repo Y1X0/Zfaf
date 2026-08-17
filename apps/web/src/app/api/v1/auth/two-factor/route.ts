@@ -8,6 +8,7 @@ import {
 import { requireActorPendingTwoFactor } from '../../../../../server/request-context.js';
 import { twoFactorDependencies } from '../../../../../server/two-factor.js';
 import { badRequest, failure, ok, unauthorized } from '../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../server/origin.js';
 
 /**
  * `/api/v1/auth/two-factor` — enrollment (docs/09 §2.8).
@@ -45,7 +46,11 @@ export async function GET(): Promise<Response> {
   return ok(status, { headers: NO_STORE });
 }
 
-export async function POST(): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActorPendingTwoFactor();
   if (!session.authenticated) return unauthorized();
 
@@ -62,6 +67,10 @@ export async function POST(): Promise<Response> {
 }
 
 export async function PUT(request: Request): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActorPendingTwoFactor();
   if (!session.authenticated) return unauthorized();
 
@@ -75,6 +84,10 @@ export async function PUT(request: Request): Promise<Response> {
 }
 
 export async function DELETE(request: Request): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActorPendingTwoFactor();
   if (!session.authenticated) return unauthorized();
 

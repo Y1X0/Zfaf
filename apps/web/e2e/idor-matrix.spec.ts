@@ -40,9 +40,19 @@ import {
  *
  * ## What counts as a pass
  *
- * `denied` means 401, 403 or 404 — never 200 and never 500. **404 is
- * preferred** for "not yours": a 403 confirms the resource exists, which turns
- * any id-taking endpoint into an enumeration oracle (docs/12 §3).
+ * This is an **authorization** matrix, so the two verdicts are about whether
+ * the guard let the caller through — not about whether their payload was any
+ * good:
+ *
+ *   • `denied` — 401, 403 or 404. **404 is preferred** for "not yours": a 403
+ *     confirms the resource exists, which turns any id-taking endpoint into an
+ *     enumeration oracle (docs/12 §3).
+ *   • `allowed` — anything else. A 400 for a deliberately malformed body and a
+ *     409 for a wrong state both mean the request reached the handler, which is
+ *     precisely what such a row claims.
+ *
+ * And never a 500, for anyone. An unhandled exception on an authorization path
+ * is a failure of the guard, not merely of the handler.
  */
 
 const BASE = 'https://127.0.0.1:3100';
@@ -57,6 +67,24 @@ const BASE = 'https://127.0.0.1:3100';
  */
 const CLIENT_ADDRESS = '203.0.113.20';
 test.use({ extraHTTPHeaders: { 'x-forwarded-for': CLIENT_ADDRESS } });
+
+/**
+ * And a distinct one per actor class.
+ *
+ * Several endpoints here are rate limited per client — the RSVP edit at five
+ * per window, the reset request at five per hour. Running one row through five
+ * actors from a single address exhausts the budget partway down the column, and
+ * the fourth actor then answers 429: not an authorization refusal, and not
+ * something the row is claiming anything about. Separating the addresses makes
+ * every cell independent, which is what a matrix is supposed to be.
+ */
+const ACTOR_ADDRESS: Readonly<Record<ActorClass, string>> = {
+  anonymous: '203.0.113.201',
+  stranger: '203.0.113.202',
+  owner: '203.0.113.203',
+  staffPending: '203.0.113.204',
+  staff: '203.0.113.205',
+};
 
 type ActorClass = 'anonymous' | 'stranger' | 'owner' | 'staffPending' | 'staff';
 type Expectation = 'allowed' | 'denied';
@@ -160,6 +188,114 @@ const MATRIX: readonly RouteExpectation[] = [
     },
   },
 
+  // ── authentication ────────────────────────────────────────────────────────
+  {
+    route: 'v1/auth/register',
+    method: 'POST',
+    path: () => '/api/v1/auth/register',
+    // A malformed body: this row is about *reachability*, not about whether
+    // registration works, and creating five accounts per run would be litter.
+    body: { email: 'not-an-email' },
+    publicBecause: 'somebody without an account is the only person who needs it',
+    expect: {
+      // Reachable by everyone — it answers 400 to this deliberately malformed
+      // body, which is the handler talking, not the guard.
+      anonymous: 'allowed',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
+  {
+    route: 'v1/auth/login',
+    method: 'POST',
+    path: () => '/api/v1/auth/login',
+    body: { email: 'nobody@example.test', password: 'not-the-password' },
+    publicBecause: 'signing in is what a caller without a session does',
+    expect: {
+      // 401 for everyone, because the credentials are wrong — the point of the
+      // row is that an existing session neither helps nor hinders.
+      anonymous: 'denied',
+      stranger: 'denied',
+      owner: 'denied',
+      staffPending: 'denied',
+      staff: 'denied',
+    },
+  },
+  {
+    route: 'v1/auth/session',
+    method: 'GET',
+    path: () => '/api/v1/auth/session',
+    expect: {
+      anonymous: 'denied',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
+  {
+    route: 'v1/auth/verify-email',
+    method: 'POST',
+    path: () => '/api/v1/auth/verify-email',
+    body: { token: 'not-a-real-token' },
+    publicBecause: 'the link is followed before the account is usable',
+    expect: {
+      // Reachable by anyone; a forged token gets 400 from the handler.
+      anonymous: 'allowed',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
+  {
+    route: 'v1/auth/verify-email',
+    method: 'PUT',
+    path: () => '/api/v1/auth/verify-email',
+    expect: {
+      // Requires a session rather than an address: an endpoint that took an
+      // email would send mail to anyone, at anyone's request.
+      anonymous: 'denied',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
+  {
+    route: 'v1/auth/password-reset',
+    method: 'POST',
+    path: () => '/api/v1/auth/password-reset',
+    body: { email: 'nobody@example.test' },
+    publicBecause: 'somebody who cannot sign in is exactly who needs it',
+    expect: {
+      // 200 for an address with no account, on purpose: any other answer makes
+      // this an oracle for which addresses are customers.
+      anonymous: 'allowed',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
+  {
+    route: 'v1/auth/password-reset',
+    method: 'PUT',
+    path: () => '/api/v1/auth/password-reset',
+    body: { token: 'not-a-real-token', password: 'a-perfectly-fine-password-1' },
+    publicBecause: 'the reset link is followed while signed out',
+    expect: {
+      // `RESET_LINK_INVALID`, from the handler — reachable by anyone.
+      anonymous: 'allowed',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
+
   // ── two-factor (the endpoints that exist to satisfy the gate) ─────────────
   {
     route: 'v1/auth/two-factor',
@@ -183,10 +319,11 @@ const MATRIX: readonly RouteExpectation[] = [
       anonymous: 'denied',
       stranger: 'allowed',
       owner: 'allowed',
-      // The staff fixtures already hold a confirmed credential, so beginning
-      // again is a conflict rather than a permission failure.
-      staffPending: 'denied',
-      staff: 'denied',
+      // The staff fixtures already hold a confirmed credential, so this is a
+      // 409 — the guard let them through and the *state* refused them, which
+      // is a different thing and the matrix says so.
+      staffPending: 'allowed',
+      staff: 'allowed',
     },
   },
   {
@@ -196,10 +333,22 @@ const MATRIX: readonly RouteExpectation[] = [
     body: { code: '000000' },
     expect: {
       anonymous: 'denied',
+      /**
+       * 401 for the two customers, and the reason is worth stating because it
+       * looks like an inconsistency and is not.
+       *
+       * The `POST` row above began an enrollment for them, so they now hold an
+       * **unconfirmed** credential — and `000000` is not the code for it, which
+       * is a wrong-code refusal. The staff fixtures hold a *confirmed* one, so
+       * their request is rejected as a conflict before any code is examined.
+       *
+       * Both are correct. The row's claim is the one they share: a wrong code
+       * never confirms anything.
+       */
       stranger: 'denied',
       owner: 'denied',
-      staffPending: 'denied',
-      staff: 'denied',
+      staffPending: 'allowed',
+      staff: 'allowed',
     },
   },
   {
@@ -209,8 +358,11 @@ const MATRIX: readonly RouteExpectation[] = [
     body: { code: '000000' },
     expect: {
       anonymous: 'denied',
-      stranger: 'denied',
-      owner: 'denied',
+      // 409: nothing enrolled to remove.
+      stranger: 'allowed',
+      owner: 'allowed',
+      // 403, and this is the row that matters — "mandatory, no exception" would
+      // mean nothing if the holder could switch it off.
       staffPending: 'denied',
       staff: 'denied',
     },
@@ -356,6 +508,27 @@ const MATRIX: readonly RouteExpectation[] = [
       staff: 'allowed',
     },
   },
+  /**
+   * Last, and that placement is load-bearing.
+   *
+   * Signing out ends the session it is called with, so every row after it would
+   * run without one and report a refusal that says nothing about authorization.
+   */
+  {
+    route: 'v1/auth/logout',
+    method: 'POST',
+    path: () => '/api/v1/auth/logout',
+    publicBecause: 'a caller must be able to leave whatever state their session is in',
+    expect: {
+      anonymous: 'allowed',
+      stranger: 'allowed',
+      owner: 'allowed',
+      // Deliberately reachable while a challenge is outstanding: refusing to
+      // let somebody *leave* until they finish authenticating protects nothing.
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
 ];
 
 /**
@@ -424,7 +597,7 @@ test.afterAll(async () => {
 
 async function contextFor(browser: Browser, actor: ActorClass): Promise<BrowserContext> {
   const context = await browser.newContext({
-    extraHTTPHeaders: { 'x-forwarded-for': CLIENT_ADDRESS },
+    extraHTTPHeaders: { 'x-forwarded-for': ACTOR_ADDRESS[actor] },
   });
   const token = cookies[actor];
   if (token) {
@@ -460,16 +633,11 @@ for (const entry of MATRIX) {
       const status = response.status();
       await context.close();
 
-      if (expected === 'denied') {
-        // 401, 403 or 404 — and 404 is the one we prefer, because 403 confirms
-        // the resource exists.
-        expect(
-          [401, 403, 404, 409, 429].includes(status),
-          `${entry.method} ${path} as ${actor} answered ${status}`,
-        ).toBe(true);
-      } else {
-        expect(status < 400, `${entry.method} ${path} as ${actor} answered ${status}`).toBe(true);
-      }
+      const refused = [401, 403, 404].includes(status);
+      expect(
+        refused,
+        `${entry.method} ${path} as ${actor} answered ${status}, expected ${expected}`,
+      ).toBe(expected === 'denied');
 
       // Never a 500, whoever asks. An unhandled exception on an authorization
       // path is a failure of the guard, not merely of the handler.
@@ -519,6 +687,69 @@ test('every route and method on disk has a declared expectation', () => {
 
   expect(undeclared, 'these endpoints exist but have no authorization expectation').toEqual([]);
   expect(stale, 'these expectations name endpoints that no longer exist').toEqual([]);
+});
+
+test('every mutating endpoint refuses a cross-site Origin', async ({ browser }) => {
+  /**
+   * CSRF layer 2 (docs/09 §5), checked the same way the matrix is: against the
+   * route tree rather than a list.
+   *
+   * `SameSite=Lax` is layer 1 and covers the majority, and docs/09 says in a
+   * warning box that it is not sufficient alone. So every mutating handler
+   * validates `Origin` — and the endpoint added next month has to as well,
+   * which is what this test is for.
+   *
+   * The request carries a real session cookie: a guard that only refused
+   * *unauthenticated* cross-site writes would refuse nothing that matters,
+   * since CSRF is the attack where the victim's cookie is attached.
+   */
+  const evil = 'https://attacker.example';
+  const context = await browser.newContext({
+    extraHTTPHeaders: { origin: evil, 'x-forwarded-for': CLIENT_ADDRESS },
+  });
+  await context.addCookies([
+    {
+      name: '__Host-zfaf_session',
+      value: cookies.owner!,
+      url: BASE,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ]);
+
+  const mutating = MATRIX.filter((entry) => entry.method !== 'GET');
+  const accepted: string[] = [];
+
+  for (const entry of mutating) {
+    const body = entry.bodyFor ? entry.bodyFor(fixtures) : entry.body;
+    const response = await context.request.fetch(entry.path(fixtures), {
+      method: entry.method,
+      ...(body === undefined ? {} : { data: body }),
+      maxRedirects: 0,
+    });
+    if (response.status() !== 403) {
+      accepted.push(`${entry.method} ${entry.route} answered ${response.status()}`);
+    }
+  }
+  await context.close();
+
+  expect(accepted, 'these mutating endpoints accepted a cross-site request').toEqual([]);
+});
+
+test('a same-origin request is not caught by the CSRF guard', async ({ browser }) => {
+  // The control. Without it, the test above would also pass if the guard
+  // rejected everything — including the application's own forms.
+  const context = await browser.newContext({
+    // Its own address: the matrix above already spent this endpoint's
+    // per-client budget, and a 429 here would look like a CSRF rejection.
+    extraHTTPHeaders: { origin: BASE, 'x-forwarded-for': '203.0.113.21' },
+  });
+  const response = await context.request.post('/api/v1/auth/password-reset', {
+    data: { email: 'nobody@example.test' },
+  });
+  expect(response.status()).toBe(200);
+  await context.close();
 });
 
 test('every route that is reachable anonymously says why', () => {

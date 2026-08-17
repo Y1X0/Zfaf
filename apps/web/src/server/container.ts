@@ -10,6 +10,7 @@ import {
   PrismaSessionRepository,
   PrismaTwoFactorRepository,
   PrismaUserRepository,
+  PrismaVerificationTokenRepository,
   getPrismaClient,
 } from '@zfaf/db';
 // Imported by subpath, not from the package root. The root barrel also
@@ -59,6 +60,7 @@ export interface Container {
   readonly sessions: PrismaSessionRepository;
   readonly memberships: PrismaMembershipRepository;
   readonly twoFactor: PrismaTwoFactorRepository;
+  readonly verificationTokens: PrismaVerificationTokenRepository;
   readonly audit: PrismaAuditLogRepository;
   readonly invitations: PrismaInvitationRepository;
   readonly rsvps: PrismaRsvpRepository;
@@ -106,6 +108,7 @@ export function container(): Container {
     sessions: new PrismaSessionRepository(prisma),
     memberships: new PrismaMembershipRepository(prisma),
     twoFactor: new PrismaTwoFactorRepository(prisma),
+    verificationTokens: new PrismaVerificationTokenRepository(prisma),
     audit: new PrismaAuditLogRepository(prisma),
     invitations: new PrismaInvitationRepository(prisma),
     rsvps: new PrismaRsvpRepository(prisma),

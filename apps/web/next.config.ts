@@ -77,7 +77,13 @@ const nextConfig: NextConfig = {
     // A Rust binding; webpack cannot parse a `.node` binary.
     '@resvg/resvg-js',
   ],
-  webpack(config: { resolve?: { extensionAlias?: Record<string, string[]> } }) {
+  webpack(
+    config: {
+      resolve?: { extensionAlias?: Record<string, string[]> };
+      externals?: unknown[];
+    },
+    { isServer }: { isServer: boolean },
+  ) {
     // Our TypeScript is configured for NodeNext, so every relative import ends
     // in `.js` even though the file on disk is `.ts`. `tsc` resolves that;
     // webpack does not, and the failure only appears once a workspace package
@@ -88,6 +94,25 @@ const nextConfig: NextConfig = {
       '.js': ['.ts', '.tsx', '.js'],
       '.mjs': ['.mts', '.mjs'],
     };
+
+    /**
+     * Argon2 stays external, explicitly.
+     *
+     * `serverExternalPackages` already names it, and that is not enough here:
+     * the import arrives through `@zfaf/infra`, which is in
+     * `transpilePackages`, and webpack follows a transpiled package's imports
+     * rather than consulting the external list. It then reaches the
+     * platform-specific `.node` binaries — `argon2.android-arm-eabi.node` and
+     * a dozen siblings — and cannot parse them.
+     *
+     * Declaring the external here catches the specifier wherever it comes from.
+     * Server-only, because the client bundle must never see it at all.
+     */
+    if (isServer) {
+      config.externals ??= [];
+      config.externals.push({ '@node-rs/argon2': 'commonjs @node-rs/argon2' });
+    }
+
     return config;
   },
   async headers() {

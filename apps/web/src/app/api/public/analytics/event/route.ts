@@ -2,6 +2,7 @@ import { recordView } from '@zfaf/core';
 
 import { container } from '../../../../../server/container.js';
 import { clientIpHash } from '../../../../../server/request-context.js';
+import { requireSameOrigin } from '../../../../../server/origin.js';
 
 /**
  * `POST /api/public/analytics/event` — one view, counted anonymously (D8.2).
@@ -58,6 +59,10 @@ function noContent(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   try {
     const deps = container();
     const ipHash = await clientIpHash();

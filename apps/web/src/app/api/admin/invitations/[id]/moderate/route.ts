@@ -4,6 +4,7 @@ import { adminNotFound, adminSession, withAdminHeaders } from '../../../../../..
 import { container } from '../../../../../../server/container.js';
 import { clientIpHash } from '../../../../../../server/request-context.js';
 import { badRequest, conflict, ok, readJsonBody } from '../../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../../server/origin.js';
 
 /**
  * `POST /api/admin/invitations/{id}/moderate` — the kill switch (D8.5).
@@ -36,6 +37,10 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const gate = await adminSession();
   if (!gate.ok) return gate.response;
 

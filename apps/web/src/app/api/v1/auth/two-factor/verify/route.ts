@@ -3,6 +3,7 @@ import { verifyTwoFactorChallenge } from '@zfaf/core';
 import { requireActorPendingTwoFactor } from '../../../../../../server/request-context.js';
 import { twoFactorDependencies } from '../../../../../../server/two-factor.js';
 import { badRequest, failure, ok, unauthorized } from '../../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../../server/origin.js';
 
 /**
  * `POST /api/v1/auth/two-factor/verify` — the login challenge (docs/09 §2.8).
@@ -21,6 +22,10 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActorPendingTwoFactor();
   if (!session.authenticated) return unauthorized();
 

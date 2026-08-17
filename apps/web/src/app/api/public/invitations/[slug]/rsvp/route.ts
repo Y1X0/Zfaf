@@ -12,6 +12,7 @@ import {
   ok,
   rateLimited,
 } from '../../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../../server/origin.js';
 
 /**
  * `POST /api/public/invitations/{slug}/rsvp` — a guest replying (D7.1–D7.3).
@@ -47,6 +48,10 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const { slug } = await context.params;
   const deps = container();
   const now = deps.clock.now();

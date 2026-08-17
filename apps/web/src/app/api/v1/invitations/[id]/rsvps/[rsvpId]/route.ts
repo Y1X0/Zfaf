@@ -3,6 +3,7 @@ import { deleteRsvp } from '@zfaf/core';
 import { container } from '../../../../../../../server/container.js';
 import { requireActor } from '../../../../../../../server/request-context.js';
 import { forbidden, notFound, ok, unauthorized } from '../../../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../../../server/origin.js';
 
 /**
  * `DELETE /api/v1/invitations/{id}/rsvps/{rsvpId}` — removing a reply (D7.5).
@@ -17,9 +18,13 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string; rsvpId: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const session = await requireActor();
   if (!session.authenticated) return unauthorized();
 

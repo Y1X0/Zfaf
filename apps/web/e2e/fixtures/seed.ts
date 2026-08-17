@@ -510,6 +510,82 @@ export async function seedStaffSession(
 }
 
 /**
+ * A user row, by address or by id.
+ *
+ * For the authentication suite, which needs to check what a *response* did not
+ * say against what the database actually holds.
+ */
+export async function userByEmail(
+  email?: string,
+  userId?: string,
+): Promise<{
+  id: string;
+  email: string;
+  role: string;
+  emailVerifiedAt: Date | null;
+} | null> {
+  const prisma = prismaClient();
+  const row = userId
+    ? await prisma.user.findUnique({ where: { id: userId } })
+    : email
+      ? await prisma.user.findUnique({ where: { email } })
+      : null;
+  return row
+    ? { id: row.id, email: row.email, role: row.role, emailVerifiedAt: row.emailVerifiedAt }
+    : null;
+}
+
+/**
+ * The token a verification or reset email *would* have carried.
+ *
+ * Read from the database rather than from a response, because no endpoint
+ * returns one — a live credential in a response body is a live credential in
+ * every proxy log between the server and the browser. With `MAIL_DRIVER=noop`
+ * this is the only honest way to exercise the flow end to end.
+ *
+ * Returns null when the token has already been used, so a test cannot
+ * accidentally assert on a spent one.
+ */
+export async function latestVerificationToken(
+  userId: string,
+  purpose: 'email_verification' | 'password_reset',
+): Promise<string | null> {
+  // Two tables, one per purpose — a reset token and a verification token have
+  // different lifetimes and different blast radii, and keeping them apart means
+  // a bug in one cannot redeem the other.
+  const prisma = prismaClient();
+  const row =
+    purpose === 'email_verification'
+      ? await prisma.emailVerification.findFirst({
+          where: { userId, usedAt: null },
+          orderBy: { createdAt: 'desc' },
+        })
+      : await prisma.passwordReset.findFirst({
+          where: { userId, usedAt: null },
+          orderBy: { createdAt: 'desc' },
+        });
+  if (!row) return null;
+
+  /**
+   * Only the SHA-256 is stored, so the plaintext is recovered by brute force
+   * over the tokens this process has seen — which is impossible.
+   *
+   * Instead the fixture re-issues: it writes a token it chose, with the same
+   * hash discipline the application uses, replacing the row's hash. The flow
+   * under test is unchanged; what changes is that the test knows the secret,
+   * exactly as the recipient of the email would.
+   */
+  const plaintext = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+  const tokenHash = createHash('sha256').update(plaintext).digest();
+  if (purpose === 'email_verification') {
+    await prisma.emailVerification.update({ where: { id: row.id }, data: { tokenHash } });
+  } else {
+    await prisma.passwordReset.update({ where: { id: row.id }, data: { tokenHash } });
+  }
+  return plaintext;
+}
+
+/**
  * A second, unverified session for an operator who already has one.
  *
  * Exists for exactly one test: replaying a spent TOTP code from a different
