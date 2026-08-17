@@ -150,6 +150,18 @@ export const FREE_BETA_PLAN: PlanSnapshot = {
       'invitation.active': 3,
       'media.gallery_images': 20,
       'media.storage_mb': 200,
+      /**
+       * The per-file ceiling, 8 MB, from docs/10 §5's Free column.
+       *
+       * Separate from `media.storage_mb`: one bounds a single photo, the other
+       * the whole library. It was **absent** until the media HTTP layer was
+       * built, and absence is not neutral here — `limit()` answers `0` for a
+       * key no plan defines, so `maxUploadBytesFor` computed a 0-byte ceiling
+       * and `decideUpload` refused every upload on the only plan anyone is on
+       * with `FILE_TOO_LARGE`. Nothing caught it because the media tests each
+       * built their own plan with the key present.
+       */
+      'media.image_size_mb': 8,
       'invitation.active_days_after_event': 30,
       'team.member_count': 1,
     },

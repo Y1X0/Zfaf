@@ -8,6 +8,7 @@ import {
   PrismaMembershipRepository,
   PrismaRsvpRepository,
   PrismaSessionRepository,
+  PrismaTemplateCatalog,
   PrismaTwoFactorRepository,
   PrismaUserRepository,
   PrismaVerificationTokenRepository,
@@ -67,6 +68,8 @@ export interface Container {
   readonly analytics: PrismaAnalyticsRepository;
   readonly admin: PrismaAdminRepository;
   readonly media: PrismaMediaRepository;
+  /** The published template library (docs/23 §7). */
+  readonly templates: PrismaTemplateCatalog;
   /** The rotating salt (D8.1). Redis-only, never written anywhere durable. */
   readonly salt: DailySaltStore;
   readonly analyticsBuffer: AnalyticsBuffer;
@@ -115,6 +118,11 @@ export function container(): Container {
     analytics: new PrismaAnalyticsRepository(prisma),
     admin: new PrismaAdminRepository(prisma),
     media: new PrismaMediaRepository(prisma),
+    templates: new PrismaTemplateCatalog(prisma, (key, errors) => {
+      // A template that will not parse is invisible to customers rather than
+      // fatal, and that silence is exactly why it is logged loudly here.
+      logger.error('template.manifest_invalid', { key, errors: JSON.stringify(errors) });
+    }),
     salt: new RedisDailySalt(redis),
     analyticsBuffer: new RedisAnalyticsBuffer(redis),
     cdn: buildCdnPurger(env.CDN_ZONE_ID, env.CDN_API_TOKEN, env.PUBLIC_BASE_URL),

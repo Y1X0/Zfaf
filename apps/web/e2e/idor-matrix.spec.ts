@@ -7,6 +7,7 @@ import {
   type SeededPublished,
   cleanupSeeded,
   seedBuilder,
+  seedMedia,
   seedPublished,
   seedStaffSession,
 } from './fixtures/seed.js';
@@ -106,6 +107,8 @@ interface RouteExpectation {
 interface Fixtures {
   readonly owned: SeededPublished;
   readonly other: SeededPublished;
+  /** A pending upload on `owned`, for the media rows. */
+  readonly ownedMediaId: string;
 }
 
 /**
@@ -476,6 +479,127 @@ const MATRIX: readonly RouteExpectation[] = [
       staff: 'denied',
     },
   },
+  // ── the invitation collection (docs/23 §7) ────────────────────────────────
+  {
+    route: 'v1/invitations',
+    method: 'GET',
+    path: () => '/api/v1/invitations',
+    expect: {
+      anonymous: 'denied',
+      // Everyone signed in may list — *their own*. The scope is what makes
+      // that safe, and `invitations.spec.ts` is where it is proven; this cell
+      // only claims the guard admits them.
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'denied',
+      /**
+       * Refused, and the reason is worth stating.
+       *
+       * Staff carry `ownerId: null`, which every repository reads as "no owner
+       * constraint" — so the obvious spelling of this handler would have
+       * answered a staff session with *every tenant's* invitations, from a
+       * route with none of `/api/admin`'s protections. `customerScopeFor`
+       * exists because of this cell.
+       */
+      staff: 'denied',
+    },
+  },
+  {
+    route: 'v1/invitations',
+    method: 'POST',
+    path: () => '/api/v1/invitations',
+    // No such template, so the handler answers 404 — which is an *allowed*
+    // verdict here: the request reached the handler, which is all this row
+    // claims. Using a real template key would create rows on five actors.
+    body: {
+      templateKey: 'no-such-template-for-the-matrix',
+      title: 'IDOR matrix',
+      eventDate: '2027-01-01',
+      locale: 'ar',
+    },
+    expect: {
+      anonymous: 'denied',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'denied',
+      // The row that matters. Platform staff get an unconstrained scope, so
+      // letting them create would own the invitation to a staff account and
+      // count *every* tenant's invitations against one customer's plan limit.
+      staff: 'denied',
+    },
+  },
+
+  // ── media (D4.2, D4.7) ────────────────────────────────────────────────────
+  {
+    route: 'v1/media/upload-url',
+    method: 'POST',
+    // Deliberately the *other* owner's invitation: the interesting question
+    // for an upload endpoint is not whether a stranger may upload, it is
+    // whether they may upload *into somebody else's invitation*.
+    bodyFor: (fixtures: Fixtures) => ({
+      invitationId: fixtures.other.invitationId,
+      purpose: 'gallery',
+      filename: 'photo.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 1024,
+    }),
+    path: () => '/api/v1/media/upload-url',
+    expect: {
+      anonymous: 'denied',
+      stranger: 'denied',
+      // `owner` owns `owned`, not `other` — so the owner column is denied
+      // here too, and that is the point of pointing the row at `other`.
+      owner: 'denied',
+      staffPending: 'denied',
+      // Staff may moderate an invitation. Adding photos to it is not
+      // moderation, and their scope would place the asset under a staff id.
+      staff: 'denied',
+    },
+  },
+  {
+    route: 'v1/media/[id]',
+    method: 'GET',
+    path: (fixtures) => `/api/v1/media/${fixtures.ownedMediaId}`,
+    expect: {
+      anonymous: 'denied',
+      stranger: 'denied',
+      owner: 'allowed',
+      staffPending: 'denied',
+      // An unconstrained scope finds the row. Staff reading a customer's photo
+      // is a moderation capability the console does not offer, but the scope
+      // is what it is and this cell states the truth rather than a wish.
+      staff: 'allowed',
+    },
+  },
+  {
+    route: 'v1/media/[id]/complete',
+    method: 'POST',
+    path: (fixtures) => `/api/v1/media/${fixtures.ownedMediaId}/complete`,
+    expect: {
+      anonymous: 'denied',
+      stranger: 'denied',
+      // 409 `OBJECT_MISSING` — nothing was ever PUT. The request reached the
+      // handler, which is what "allowed" means in this matrix.
+      owner: 'allowed',
+      staffPending: 'denied',
+      staff: 'denied',
+    },
+  },
+  {
+    route: 'v1/media/[id]',
+    method: 'DELETE',
+    path: (fixtures) => `/api/v1/media/${fixtures.ownedMediaId}`,
+    expect: {
+      anonymous: 'denied',
+      stranger: 'denied',
+      // Runs last of the media rows and actually soft-deletes. Nothing after
+      // it reads this asset, and `GET` above has already run.
+      owner: 'allowed',
+      staffPending: 'denied',
+      staff: 'denied',
+    },
+  },
+
   {
     route: 'v1/slugs/available',
     method: 'GET',
@@ -583,7 +707,7 @@ const cookies: Partial<Record<ActorClass, string>> = {};
 test.beforeAll(async () => {
   const owned = await seedPublished();
   const other = await seedPublished();
-  fixtures = { owned, other };
+  fixtures = { owned, other, ownedMediaId: await seedMedia(owned) };
 
   cookies.owner = owned.sessionToken;
   cookies.stranger = (await seedBuilder()).sessionToken;

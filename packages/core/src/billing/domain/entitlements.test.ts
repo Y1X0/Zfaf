@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   FREE_BETA_PLAN,
+  LIMIT_KEYS,
   type PlanSnapshot,
   UNLIMITED,
   hasRemaining,
@@ -138,5 +139,27 @@ describe('the MVP plan', () => {
     expect(ent.can('domain.custom')).toBe(false);
     expect(ent.can('guest.management')).toBe(false);
     expect(ent.can('media.custom_music')).toBe(false);
+  });
+
+  /**
+   * The regression that motivated this block.
+   *
+   * `media.image_size_mb` was simply absent from the plan, and `limit()`
+   * answers `0` for a key nobody defines. That is the correct default for an
+   * unknown limit and a catastrophe for a known one: `maxUploadBytesFor`
+   * produced a 0-byte ceiling and every upload on the only live plan was
+   * refused `FILE_TOO_LARGE`. It survived because each media test built its
+   * own plan with the key filled in, so nothing ever asked the shipped one.
+   *
+   * Written over `LIMIT_KEYS` rather than over the six keys as they stand
+   * today, so adding a seventh limit fails here until a plan says what it is —
+   * which is the only way a silent zero gets caught at the source rather than
+   * in an upload dialog.
+   */
+  it('answers every limit the codebase knows about', () => {
+    const ent = resolveEntitlements(FREE_BETA_PLAN, [], NOW);
+    for (const key of LIMIT_KEYS) {
+      expect(ent.limit(key), `${key} is undefined on the shipped plan`).toBeGreaterThan(0);
+    }
   });
 });

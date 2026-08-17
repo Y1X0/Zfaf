@@ -236,6 +236,11 @@ export async function cleanupSeeded(): Promise<void> {
     if (userIds.length === 0) return;
 
     await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
+    // Before the user, and not by cascade: `MediaAsset.owner` is `Restrict`,
+    // so a single seeded upload makes the `user.deleteMany` below fail with a
+    // foreign-key error — and a cleanup that throws leaves the *previous*
+    // run's rows behind for the next one to trip over.
+    await prisma.mediaAsset.deleteMany({ where: { ownerId: { in: userIds } } });
     await prisma.slugHistory.deleteMany({ where: { invitation: { ownerId: { in: userIds } } } });
     await prisma.rsvp.deleteMany({ where: { invitation: { ownerId: { in: userIds } } } });
     await prisma.invitationMember.deleteMany({ where: { userId: { in: userIds } } });
@@ -399,6 +404,40 @@ export async function seedPublished(options: SeedPublishedOptions = {}): Promise
   });
 
   return { ...seeded, slug, versionId };
+}
+
+/**
+ * A media row belonging to a seeded invitation.
+ *
+ * `pending`, because that is the state the authorization matrix wants: the
+ * `complete` endpoint accepts exactly that state, so a row in any other one
+ * would answer 409 for the owner and the cell would read "denied" for a reason
+ * that has nothing to do with authorization.
+ *
+ * No object is put in storage. The matrix asks who may reach the handler, and
+ * the owner's `complete` legitimately fails with `OBJECT_MISSING` — a 409,
+ * which is an *allowed* verdict there. A suite that needed real bytes to prove
+ * a permission check would be testing storage instead.
+ */
+export async function seedMedia(seeded: SeededBuilder): Promise<string> {
+  const prisma = prismaClient();
+  const id = randomUUID();
+  await prisma.mediaAsset.create({
+    data: {
+      id,
+      ownerId: seeded.userId,
+      invitationId: seeded.invitationId,
+      kind: 'image',
+      purpose: 'gallery',
+      storageKey: `media/${seeded.userId}/${seeded.invitationId}/${id}/original.bin`,
+      originalFilename: 'e2e.jpg',
+      mimeType: 'image/jpeg',
+      sizeBytes: BigInt(1024),
+      signedMaxBytes: BigInt(8 * 1024 * 1024),
+      status: 'pending',
+    },
+  });
+  return id;
 }
 
 /** Retires a slug the way a rename does, so the 301 can be exercised. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Actor } from '../../authz/actor.js';
+import { type Actor, type UserRole, anonymous } from '../../authz/actor.js';
 import { FREE_BETA_PLAN, resolveEntitlements } from '../../billing/domain/entitlements.js';
 import { parseManifest } from '../../template/domain/template-manifest.js';
 import type { TemplateManifest } from '../../template/domain/template-manifest.js';
@@ -23,8 +23,20 @@ import { createInvitation, startingDocument } from './create-invitation.js';
 
 const NOW = new Date('2026-08-17T09:00:00.000Z');
 
-const OWNER: Actor = { kind: 'user', userId: 'user-1', role: 'customer', memberships: [] };
-const ANONYMOUS: Actor = { kind: 'anonymous' };
+function actor(userId: string, role: UserRole): Actor {
+  return {
+    kind: 'user',
+    userId,
+    role,
+    emailVerified: true,
+    status: 'active',
+    sessionId: `session-${userId}`,
+    memberships: [],
+  };
+}
+
+const OWNER: Actor = actor('user-1', 'customer');
+const ANONYMOUS: Actor = anonymous('ip-hash');
 
 function manifest(overrides: Record<string, unknown> = {}): TemplateManifest {
   const parsed = parseManifest({
@@ -125,7 +137,10 @@ function harness(options: { activeCount?: number; template?: PublishedTemplate |
           : options.template,
       ),
       entitlements: resolveEntitlements(FREE_BETA_PLAN, [], NOW),
-      ids: { uuid: () => 'invitation-1' },
+      // `token` is unused here and still required: the port is one interface,
+      // and a partial fake is how a use case that starts calling it later
+      // fails in production rather than in this file.
+      ids: { uuid: () => 'invitation-1', token: () => 'token' },
       clock: { now: () => NOW },
     },
   };
@@ -182,7 +197,7 @@ describe('who may not', () => {
   });
 
   it('refuses platform staff, who own no tenant', async () => {
-    const staff: Actor = { kind: 'user', userId: 'staff-1', role: 'admin', memberships: [] };
+    const staff: Actor = actor('staff-1', 'admin');
     const { deps, created } = harness();
     const result = await createInvitation({ ...request, actor: staff }, deps);
 

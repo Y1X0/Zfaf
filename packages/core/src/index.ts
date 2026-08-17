@@ -69,6 +69,7 @@ export * from './media/domain/original-filename.js';
 export * from './media/domain/upload-policy.js';
 export * from './media/domain/media-status.js';
 export * from './media/domain/media-deletion.js';
+export * from './media/domain/queue-contract.js';
 export * from './media/usecases/upload-media.js';
 export * from './media/usecases/manage-media.js';
 

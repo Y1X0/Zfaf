@@ -57,6 +57,30 @@ export function tenantScopeFor(actor: Actor): TenantScope | null {
 }
 
 /**
+ * A scope for a customer acting on their **own** data (docs/23 §7).
+ *
+ * `tenantScopeFor` gives platform staff a scope with `ownerId: null`, and every
+ * repository reads that as "no owner constraint" — which is correct for the
+ * admin console and wrong for anything under `/api/v1`. A staff session hitting
+ * a customer collection endpoint would receive *every tenant's* rows, from a
+ * surface with none of the admin path's protections: no `requireAdmin`, no
+ * four-hour session-age ceiling (docs/04 §10), no moderation audit trail.
+ *
+ * So the two are named differently rather than distinguished by whoever
+ * remembers. `/api/admin/*` builds a `tenantScopeFor`; a customer collection
+ * builds this, and gets null for staff.
+ *
+ * Single-resource reads by id are a separate question and deliberately not
+ * covered here — moderating one reported invitation is what staff reach is
+ * *for*. This is about the endpoints that enumerate.
+ */
+export function customerScopeFor(actor: Actor): TenantScope | null {
+  const scope = tenantScopeFor(actor);
+  if (!scope || scope.isPlatformStaff) return null;
+  return scope;
+}
+
+/**
  * A scope for background jobs.
  *
  * Explicitly named and separate from the user path so that "the retention job

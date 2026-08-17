@@ -1,5 +1,7 @@
 import { Queue, Worker, type ConnectionOptions, type Job } from 'bullmq';
 
+import { MEDIA_JOB_OPTIONS, MEDIA_QUEUE_NAME, mediaJobId } from '@zfaf/core';
+
 import {
   type ProcessMediaDeps,
   type ProcessMediaJobData,
@@ -20,23 +22,7 @@ import {
  * nobody can inspect afterwards is a failure nobody will fix.
  */
 
-/**
- * No colon, and that is a constraint rather than a style choice.
- *
- * BullMQ builds every Redis key as `{prefix}:{queue}:{...}` and refuses a
- * queue name containing `:` outright — `new Worker()` throws at construction,
- * so the worker process exits on boot. The same rule applies to a custom job
- * id (see `enqueueMediaProcessing`). Both were `media:...` until the first
- * container run, where the process died before it could take a job.
- */
-export const MEDIA_QUEUE_NAME = 'media-process';
-
-export const MEDIA_JOB_OPTIONS = {
-  attempts: 3,
-  backoff: { type: 'exponential' as const, delay: 5_000 },
-  removeOnComplete: { age: 3600, count: 1000 },
-  removeOnFail: { age: 7 * 24 * 3600 },
-} as const;
+export { MEDIA_QUEUE_NAME, MEDIA_JOB_OPTIONS } from '@zfaf/core';
 
 export function createMediaQueue(connection: ConnectionOptions): Queue<ProcessMediaJobData> {
   return new Queue<ProcessMediaJobData>(MEDIA_QUEUE_NAME, {
@@ -56,9 +42,7 @@ export async function enqueueMediaProcessing(
   queue: Queue<ProcessMediaJobData>,
   mediaId: string,
 ): Promise<void> {
-  // `media-`, not `media:` — BullMQ throws `Custom Id cannot contain :`, which
-  // would have turned every completed upload into a 500.
-  await queue.add(MEDIA_QUEUE_NAME, { mediaId }, { jobId: `media-${mediaId}` });
+  await queue.add(MEDIA_QUEUE_NAME, { mediaId }, { jobId: mediaJobId(mediaId) });
 }
 
 export interface MediaWorkerOptions {

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { ACTIONS, type Action, type Resource, can } from './can.js';
 import { type Actor, type MembershipRole, type UserRole, anonymous, systemActor } from './actor.js';
-import { scopeCoversInvitation, systemScope, tenantScopeFor } from './tenant-scope.js';
+import {
+  customerScopeFor,
+  scopeCoversInvitation,
+  systemScope,
+  tenantScopeFor,
+} from './tenant-scope.js';
 
 /**
  * The authorization matrix.
@@ -231,5 +236,38 @@ describe('tenant scope construction', () => {
 
   it('names the job on a system scope, so broad reads are visible in review', () => {
     expect(systemScope('retention').actorDescription).toBe('system:retention');
+  });
+});
+
+/**
+ * The customer scope (docs/23 §7).
+ *
+ * Its whole reason for existing is the staff row below. A collection endpoint
+ * under `/api/v1` that built an ordinary `tenantScopeFor` would hand a staff
+ * session `ownerId: null` — which every repository reads as "no owner
+ * constraint" — and answer with every tenant's rows, from a route with none of
+ * `/api/admin`'s protections: no `requireAdmin`, no four-hour session-age
+ * ceiling, no moderation audit trail.
+ */
+describe('customer scope', () => {
+  it('is an ordinary scope for a customer', () => {
+    const scope = customerScopeFor(owner);
+    expect(scope?.ownerId).toBe(OWNER_ID);
+    expect(scope?.isPlatformStaff).toBe(false);
+  });
+
+  it('refuses every staff role, so a customer collection cannot enumerate tenants', () => {
+    for (const staff of [support, admin, superadmin]) {
+      expect(
+        customerScopeFor(staff),
+        `${staff.kind}:${'role' in staff ? staff.role : ''}`,
+      ).toBeNull();
+    }
+  });
+
+  it('refuses everyone `tenantScopeFor` refuses', () => {
+    expect(customerScopeFor(anonymous('ip'))).toBeNull();
+    expect(customerScopeFor(systemActor('job'))).toBeNull();
+    expect(customerScopeFor(user({ status: 'suspended' }))).toBeNull();
   });
 });
