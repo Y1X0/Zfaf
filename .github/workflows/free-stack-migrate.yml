@@ -1,0 +1,82 @@
+# Migrations and the template library for the zero-cost deployment (ADR-0023).
+#
+# On the paid topology these run as the worker's `preDeployCommand`, before
+# either service starts (render.yaml). **Render does not offer a pre-deploy
+# command on a free instance**, so on the free stack they have to run from
+# somewhere else, and this is that somewhere.
+#
+# It is not a substitute for the gate in docs/14 §4 — it is that gate, moved.
+# Triggered by hand, run before the deploy, and it fails loudly rather than
+# letting a service start against a schema it has not seen.
+#
+# `db:templates` is the half people forget. The template library lives twice by
+# necessity — as manifests in the repository, and as rows an invitation pins a
+# version to for life (ADR-0005) — and this is the only thing carrying the
+# first into the second. Without it the `templates` table is empty, the
+# dashboard offers nothing, and **no customer can create an invitation at all**.
+name: Free stack — migrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type the database this targets (e.g. neon-production) to confirm.'
+        required: true
+        type: string
+
+concurrency:
+  group: free-stack-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Apply migrations and publish the template library
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Record what is being applied, and where it is not
+        run: |
+          git rev-parse HEAD
+          echo "target: ${{ inputs.confirm }}"
+          ls packages/db/prisma/migrations | tail -5
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @zfaf/db db:generate
+
+      # Expand-only, always (docs/14 §5). A `DROP` in the same deploy as the
+      # code that stopped using the column breaks the instance still serving.
+      - name: Apply migrations
+        env:
+          DATABASE_URL: ${{ secrets.FREE_STACK_DATABASE_URL }}
+        run: pnpm --filter @zfaf/db db:deploy
+
+      # Idempotent, and exits non-zero if a manifest changed without a version
+      # bump — which fails this run rather than quietly publishing a library
+      # nobody reviewed.
+      - name: Publish the template library
+        env:
+          DATABASE_URL: ${{ secrets.FREE_STACK_DATABASE_URL }}
+        run: pnpm --filter @zfaf/db db:templates
+
+      # Runs twice on purpose. The second pass proves the idempotency this
+      # whole step depends on, in the place it actually matters rather than in
+      # a container on a runner.
+      - name: Publish it again, and prove nothing changed
+        env:
+          DATABASE_URL: ${{ secrets.FREE_STACK_DATABASE_URL }}
+        run: pnpm --filter @zfaf/db db:templates
