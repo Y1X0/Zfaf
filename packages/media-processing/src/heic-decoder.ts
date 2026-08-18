@@ -1,3 +1,16 @@
+// The declaration has to travel with the module, not with the package that
+// happens to compile it.
+//
+// `libheif-js` ships no types, so the ambient `declare module` next door is the
+// only thing that makes this import compile. This package is consumed as
+// TypeScript source and ADR-0023 gave it two consumers, each with its own
+// `tsconfig` and its own `include` — so a declaration that only one of them
+// picks up breaks the other's typecheck, which is exactly what happened.
+//
+// The rule prefers `import`, and an `import` cannot express this: there is
+// nothing to import from an ambient module declaration.
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference -- see above
+/// <reference path="./libheif-js.d.ts" />
 import libheif, { type HeifImage } from 'libheif-js';
 
 import { MAX_IMAGE_PIXELS, type ProcessingFailure, checkImageDimensions } from '@zfaf/core';

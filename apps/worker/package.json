@@ -8,18 +8,16 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node --import tsx src/index.ts",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "fixtures:heic": "node scripts/fetch-heic-fixture.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@zfaf/config": "workspace:*",
     "@zfaf/core": "workspace:*",
     "@zfaf/db": "workspace:*",
     "@zfaf/infra": "workspace:*",
+    "@zfaf/media-processing": "workspace:*",
     "@zfaf/shared": "workspace:*",
-    "bullmq": "^6.1.1",
-    "libheif-js": "^1.19.8",
-    "sharp": "^0.35.3"
+    "bullmq": "^6.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

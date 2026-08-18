@@ -60,8 +60,8 @@ module.exports = {
       name: 'image-library-stays-in-the-worker',
       severity: 'error',
       comment:
-        'Sharp is a native dependency and belongs to the processing adapter. packages/core declares the ImageProcessor port; nothing else decodes images.',
-      from: { pathNot: '^apps/worker/src/media/' },
+        'Sharp is a native dependency and belongs to the processing adapter, which ADR-0023 moved into packages/media-processing so the worker and the web app can both reach it through the port. packages/core declares the ImageProcessor port; nothing else decodes images.',
+      from: { pathNot: '^packages/media-processing/src/' },
       to: { path: '(^|/)sharp(/|$)' },
     },
     {
@@ -69,7 +69,7 @@ module.exports = {
       severity: 'error',
       comment:
         'ADR-0019: libheif-js is imported only by the HEIC decoding adapter. Everything else receives raw pixels or an encoded image through the ImageProcessor port.',
-      from: { pathNot: '^apps/worker/src/media/heic-decoder\\.ts$' },
+      from: { pathNot: '^packages/media-processing/src/heic-decoder\\.ts$' },
       to: { path: '(^|/)libheif-js(/|$)' },
     },
     {

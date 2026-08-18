@@ -7,7 +7,7 @@ import {
   type ProcessMediaJobData,
   type ProcessMediaOutcome,
   processMediaJob,
-} from './process-media-job.js';
+} from '@zfaf/media-processing';
 
 /**
  * Queue wiring for media processing (D4.3).

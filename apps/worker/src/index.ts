@@ -19,7 +19,7 @@ import {
 import { S3StorageProvider } from '@zfaf/infra';
 import { RedisAnalyticsBuffer, closeRedis, getRedis } from '@zfaf/infra/analytics';
 
-import { SharpImageProcessor } from './media/sharp-image-processor.js';
+import { SharpImageProcessor } from '@zfaf/media-processing';
 import { startMediaWorker } from './media/queue.js';
 
 /**

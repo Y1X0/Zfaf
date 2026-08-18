@@ -7,17 +7,14 @@
  * repository — so the fixture is fetched on demand into a gitignored directory
  * and the test that needs it skips, visibly, when it is absent.
  *
- * Usage: pnpm --filter @zfaf/worker fixtures:heic
+ * Usage: pnpm --filter @zfaf/media-processing fixtures:heic
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SOURCE = 'https://raw.githubusercontent.com/strukturag/libheif/master/examples/example.heic';
-const target = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../src/media/__fixtures__/sample.heic',
-);
+const target = resolve(dirname(fileURLToPath(import.meta.url)), '../src/__fixtures__/sample.heic');
 
 const response = await fetch(SOURCE);
 if (!response.ok) {

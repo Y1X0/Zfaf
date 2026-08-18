@@ -132,18 +132,15 @@ importers:
       '@zfaf/infra':
         specifier: workspace:*
         version: link:../../packages/infra
+      '@zfaf/media-processing':
+        specifier: workspace:*
+        version: link:../../packages/media-processing
       '@zfaf/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       bullmq:
         specifier: ^6.1.1
         version: 6.1.1(ioredis@5.11.1)
-      libheif-js:
-        specifier: ^1.19.8
-        version: 1.19.8
-      sharp:
-        specifier: ^0.35.3
-        version: 0.35.3(@types/node@22.20.1)
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -297,6 +294,34 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+
+  packages/media-processing:
+    dependencies:
+      '@zfaf/core':
+        specifier: workspace:*
+        version: link:../core
+      '@zfaf/shared':
+        specifier: workspace:*
+        version: link:../shared
+      libheif-js:
+        specifier: ^1.19.8
+        version: 1.19.8
+      sharp:
+        specifier: ^0.35.3
+        version: 0.35.3(@types/node@22.20.1)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      '@zfaf/infra':
+        specifier: workspace:*
+        version: link:../infra
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(tsx@4.23.12)
 
   packages/shared:
     devDependencies:

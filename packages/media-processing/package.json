@@ -1,0 +1,26 @@
+{
+  "name": "@zfaf/media-processing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "fixtures:heic": "node scripts/fetch-heic-fixture.mjs"
+  },
+  "dependencies": {
+    "@zfaf/core": "workspace:*",
+    "@zfaf/shared": "workspace:*",
+    "libheif-js": "^1.19.8",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@zfaf/infra": "workspace:*",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

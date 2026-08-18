@@ -47,6 +47,7 @@ COPY packages/db/package.json packages/db/package.json
 COPY packages/infra/package.json packages/infra/package.json
 COPY packages/invitation-renderer/package.json packages/invitation-renderer/package.json
 COPY packages/media-client/package.json packages/media-client/package.json
+COPY packages/media-processing/package.json packages/media-processing/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY tools/eslint-plugin-zfaf/package.json tools/eslint-plugin-zfaf/package.json
 
