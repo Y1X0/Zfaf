@@ -79,10 +79,24 @@ Actions → Free stack — migrate → Run workflow
 [docs/22 §٧-أ](22-deployment-render.md): الرفع يتمّ من متصفّح العميلة مباشرةً إلى
 الحاوية، وبلا CORS يفشل بلا أثر في أي سجلّ على الإطلاق.
 
-### ٣.٤ خدمة Render المجانية
+### ٣.٤ خدمة Render المجانية — ✅ **أُنشئت فعلًا**
 
-من `infra/render/free.yaml`. القيم غير السرّية في المخطّط؛ والسرّية تُكتب في
-اللوحة:
+```
+zfaf-web-free   service   exists   https://zfaf-web-free.onrender.com
+zfaf-web-free → zfaf-config-free   linked
+zfaf-web-free → zfaf-secrets       linked
+```
+
+`plan: free` · `runtime: docker` · `region: frankfurt` · `autoDeploy: no` ·
+`healthCheckPath: /api/health` · الفرع `claude/wedding-invitation-saas-ecfcdg`.
+**بلا بطاقة، وبلا أي مبلغ.** هذا يحسم السؤال المفتوح في
+[docs/25 §٣.١](25-zero-cost-launch.md): Render تقبل نشر Docker على النسخة
+المجانية من هذا الحساب.
+
+ولا يزال هناك مورد Render واحد فقط: **لا Postgres ولا Key Value** — الأولى على
+Neon، والثانية على Upstash (§٢-أ).
+
+القيم غير السرّية في المخطّط؛ والسرّية تُكتب في اللوحة:
 
 `DATABASE_URL` (Neon) · `REDIS_URL` (Upstash) · `SESSION_SECRET` · `TOTP_ENCRYPTION_KEY` ·
 `STORAGE_ENDPOINT` · `STORAGE_ACCESS_KEY_ID` · `STORAGE_SECRET_ACCESS_KEY` ·
@@ -155,7 +169,8 @@ E2E_BASE_URL=https://<the-url> pnpm --filter @zfaf/web exec playwright test loca
 
 | البند | الحالة |
 |---|---|
-| هل تقبل Render نشر Docker مجانًا بلا بطاقة؟ | **لم يُجرَّب على هذا الحساب** |
+| ~~هل تقبل Render نشر Docker مجانًا بلا بطاقة؟~~ | ✅ **نعم — أُنشئت الخدمة** (§٣.٤) |
+| هل تُقلع الصورة فعلًا على النسخة المجانية؟ | **لا.** لا نشرة بعد: تنقص `DATABASE_URL` و`REDIS_URL` والأسرار |
 | زمن الرفع على ٠٫١ معالج | مُستنتَج من قياس على أنوية كاملة، لا مقيس على النسخة |
 | Prisma عبر مجمّع اتصالات Neon | متوقّع أن يعمل بلا تعديل، وغير مُختبَر |
 | B2 مع التوقيع المسبق وCORS | متوافق على الورق، وغير مُختبَر |
