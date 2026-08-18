@@ -313,3 +313,35 @@ test('undo responds to the keyboard shortcut', async ({ page }) => {
   await page.keyboard.press('Control+z');
   await expect(page.getByTestId('groom-name')).toHaveValue('');
 });
+
+/**
+ * The builder hydrates cleanly (docs/23 §9-ب).
+ *
+ * This is the counterpart to `date-format.test.ts`, and it runs here because
+ * here is where the defect actually appeared. The wedding date was formatted
+ * with `ar-SA-u-nu-latn`, which names a numbering system and no calendar;
+ * `ar-SA` defaults to `islamic-umalqura` in current CLDR, and **Node and
+ * Chromium disagree about applying it**. The server rendered
+ * `18 أغسطس 2027` and the browser re-rendered `16 ربيع الأول 1449 هـ`.
+ *
+ * A unit test could not have caught it: Node picks Gregorian on its own, so
+ * the assertion passes there whether or not the calendar is pinned. Only a
+ * real browser rendering server-produced HTML shows the disagreement — which
+ * is exactly what this does.
+ *
+ * The assertion is deliberately broad. Any uncaught exception on the builder
+ * is worth failing for: React discards the server tree and re-renders on a
+ * hydration mismatch, which on this surface can drop focus mid-typing.
+ */
+test('the builder raises no hydration mismatch or uncaught error', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  await openBuilder(page);
+  // The preview is a separate document that renders the same date; both have
+  // to settle before the page can be called clean.
+  await expect(page.getByTestId('preview-frame')).toBeAttached();
+  await page.waitForLoadState('networkidle');
+
+  expect(errors, errors.join('\n')).toEqual([]);
+});

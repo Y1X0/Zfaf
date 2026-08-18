@@ -64,7 +64,63 @@ node scripts/check-production-env.mjs --env-file ./candidate.env
 | خطة Postgres | `basic-1gb` | تُطابق مع قائمة خطط Render الحالية، ومع حجم القرص المتوقّع. |
 | خطة Key Value | `starter` | نفس الشيء. الشرط غير القابل للتفاوض هو `noeviction` لا الحجم. |
 | خطة الخدمتين | `standard` | `preDeployCommand` يتطلّب خطة مدفوعة. ترميز HEIC يحتاج ذاكرة أكثر من الحدّ الأدنى. |
-| الفرع | `main` | العمل الحالي على فرع الميزة؛ المخطّط يشير إلى `main` عمداً. |
+| الفرع | `claude/wedding-invitation-saas-ecfcdg` | الفرع الوحيد في المستودع، وهو الافتراضي. كان `main` وهو غير موجود أصلاً — و`check-production-env.mjs` صار **يحلّ** الفرع فيمنع العودة إلى ref لا وجود له. |
+
+---
+
+## ٣-أ. الشرطان الخارجيان — وحدهما ما يوقف التزويد الآن
+
+كل شيء آخر مبنيّ ومُختبَر وآليّ. ما تبقّى **اعتمادان لا يستطيع أي كود أن يوفّرهما
+لنفسه**، لأنهما مِلكك:
+
+### ١) `RENDER_API_KEY` كسرّ في المستودع
+
+المُطبِّق (`scripts/render-provision.mjs`) يقرأ `render.yaml` ويُنشئ ما يعلنه،
+ويعمل عبر `.github/workflows/render-provision.yml` — لأن بوّابة الصندوق التطويري
+ترفض `api.render.com` بـ 403، تماماً كما ترفض Docker Hub.
+
+شُغِّل فعلاً في وضع `preflight` وأثبت غياب المفتاح:
+
+```
+✖ RENDER_API_KEY is not set.
+```
+
+**ما تفعله:** مفتاح من <https://dashboard.render.com/u/settings#api-keys>، ثم
+`Settings → Secrets and variables → Actions → New repository secret` باسم
+`RENDER_API_KEY`. لا يمرّ عبر محادثة ولا ملف ولا سجلّ.
+
+ثم: `Actions → Render provision → Run workflow → mode: preflight` — يسرد ما
+سيُنشأ ولا يُنشئ شيئاً. وحين تقتنع بالقائمة: `mode: provision`.
+
+المُطبِّق **يرفض** أي حقل في `render.yaml` لا يعرف كيف يرسله، ولا يُنشئ شيئاً
+عندها. هذا ما يجعل «طُبِّق المخطّط» جملة صادقة لا تقريبية.
+
+### ٢) قيم `zfaf-secrets` الإحدى عشرة في اللوحة
+
+`parseEnv` يرفض الإقلاع على بيئة ناقصة، فأول نشرة تفشل حتى تكتمل. هذا سلوك
+مقصود لا عطل.
+
+`SESSION_SECRET` · `TOTP_ENCRYPTION_KEY` · `STORAGE_ENDPOINT` ·
+`STORAGE_ACCESS_KEY_ID` · `STORAGE_SECRET_ACCESS_KEY` · `MAIL_RESEND_API_KEY` ·
+`CDN_ZONE_ID` · `CDN_API_TOKEN` · `SENTRY_DSN` · `HEALTH_CHECK_TOKEN` ·
+`TURNSTILE_SECRET_KEY`
+
+### ⚠️ وقرار واحد قبل أول نشرة staging
+
+`zfaf-config` يحمل قيم **الإنتاج** داخل الملف:
+
+```
+PUBLIC_BASE_URL         = https://zfaf.app
+STORAGE_PUBLIC_BASE_URL = https://cdn.zfaf.app
+```
+
+على staging هذا خطأ فعّال لا تجميلي: `PUBLIC_BASE_URL` مصدر **كل** رابط يطبعه
+التطبيق — رابط تفعيل البريد، حمولة QR، الوسم القانوني. لو بقي كما هو فستُرسل
+staging رسائل تفعيل تشير إلى الإنتاج، وتولّد أكواد QR لعناوين لا يخدمها هذا
+النشر.
+
+**تجاوَزه على مستوى الخدمتين** في اللوحة بعنوان `*.onrender.com` الحقيقي بعد
+إنشائهما. متغيّر على الخدمة يتقدّم على قيمة المجموعة، والملف يبقى كما هو.
 
 ---
 

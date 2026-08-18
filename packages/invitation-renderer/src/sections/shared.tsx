@@ -97,6 +97,37 @@ export function Divider(): ReactElement {
 }
 
 /**
+ * The locale tag every displayed date and time is formatted with.
+ *
+ * **`ca-gregory` is pinned, and that is a correctness fix rather than a
+ * preference.** `ar-SA` carries `islamic-umalqura` as its default calendar in
+ * current CLDR, and runtimes disagree about it: Node resolves `ar-SA` to
+ * `gregory`, Chromium resolves the same tag to `islamic-umalqura`. So one
+ * wedding date, from one document, produced two different strings —
+ *
+ *     server:  الأربعاء، 18 أغسطس 2027
+ *     client:  الأربعاء، 16 ربيع الأول 1449 هـ
+ *
+ * — which surfaced as a React hydration mismatch in the builder preview, and
+ * is worse than a warning: the preview a couple approves would not be the page
+ * a guest opens, and two guests on different browsers could read different
+ * dates off the same invitation. A runtime upgrade could also silently
+ * restyle every date already in circulation.
+ *
+ * Gregorian is what the stored value *is*: `content.wedding.date` is
+ * `YYYY-MM-DD`, the builder collects it with a Gregorian date picker, and the
+ * countdown counts to the Gregorian instant. Showing a Hijri date would be a
+ * product decision nobody has made — and it must not be made by accident.
+ *
+ * The numbering system stays configurable, because that is a genuine theme
+ * choice (`theme.numerals`) rather than a change of calendar.
+ */
+export function displayLocaleTag(locale: 'ar' | 'en', numerals: 'latin' | 'arabic-indic'): string {
+  if (locale !== 'ar') return 'en-GB-u-ca-gregory';
+  return `ar-SA-u-nu-${numerals === 'latin' ? 'latn' : 'arab'}-ca-gregory`;
+}
+
+/**
  * Formats a date for display.
  *
  * Uses `Intl` with an explicit time zone rather than string manipulation.
@@ -111,7 +142,7 @@ export function formatEventDate(
 ): string {
   const [year, month, day] = date.split('-').map(Number) as [number, number, number];
   const instant = new Date(Date.UTC(year, month - 1, day, 12));
-  const tag = locale === 'ar' ? `ar-SA-u-nu-${numerals === 'latin' ? 'latn' : 'arab'}` : 'en-GB';
+  const tag = displayLocaleTag(locale, numerals);
 
   return new Intl.DateTimeFormat(tag, {
     timeZone: timezone,
@@ -130,7 +161,7 @@ export function formatTime(
   if (!time) return null;
   const [hour, minute] = time.split(':').map(Number) as [number, number];
   const instant = new Date(Date.UTC(2000, 0, 1, hour, minute));
-  const tag = locale === 'ar' ? `ar-SA-u-nu-${numerals === 'latin' ? 'latn' : 'arab'}` : 'en-GB';
+  const tag = displayLocaleTag(locale, numerals);
 
   return new Intl.DateTimeFormat(tag, {
     timeZone: 'UTC',

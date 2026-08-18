@@ -241,7 +241,14 @@ export function previewCopy(input: PreviewCopyInput): PreviewCopy {
  */
 function formatEventDate(date: string, locale: 'ar' | 'en', timezone: string): string {
   try {
-    return new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+    /**
+     * `ca-gregory`, for the reason `displayLocaleTag` gives in the renderer:
+     * Arabic locales default to `islamic-umalqura` in current CLDR and
+     * runtimes disagree about it, so the same date renders differently
+     * depending on which ICU build formatted it. A link preview whose date
+     * changes on a Node upgrade is a lie already sitting in a chat thread.
+     */
+    return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-ca-gregory' : 'en-GB-u-ca-gregory', {
       timeZone: timezone,
       day: 'numeric',
       month: 'long',
