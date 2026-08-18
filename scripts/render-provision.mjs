@@ -628,7 +628,12 @@ for (const service of services.filter((entry) => entry.type === 'web' || entry.t
       record('link', `${service.name} → ${groupName}`, 'FAILED', 'group not found');
       continue;
     }
-    await api(`/services/${id}/env-groups/${group.id}`, { method: 'PUT' });
+    // `POST /env-groups/{group}/services/{service}` — the link is owned by the
+    // group, not by the service. The mirror image of that path answers a bare
+    // `404 page not found`, which reads like the group or the service is
+    // missing rather than like the route is: the service was created fine and
+    // sat there unlinked while the run reported a not-found.
+    await api(`/env-groups/${group.id}/services/${id}`, { method: 'POST' });
     record('link', `${service.name} → ${groupName}`, 'linked');
   }
 }
