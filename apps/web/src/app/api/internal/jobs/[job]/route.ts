@@ -9,6 +9,7 @@ import { expireDueInvitations, flushAnalytics, redriveStuckMedia, sweepMedia } f
 
 import { container } from '../../../../../server/container.js';
 import { dispatchMediaProcessing } from '../../../../../server/media-dispatch.js';
+import { requireSameOrigin } from '../../../../../server/origin.js';
 import { failure, notFound, ok } from '../../../../../server/responses.js';
 
 /**
@@ -37,8 +38,15 @@ import { failure, notFound, ok } from '../../../../../server/responses.js';
  * objects is worse than no maintenance at all.
  *
  * It answers `404` rather than `401` to anything unauthorised, including an
- * unknown job name. A `401` would confirm the endpoint exists and invite the
- * next request; there is nothing here for an unauthenticated caller to learn.
+ * unknown job name — a `401` would confirm which job names exist, and the
+ * caller has no business enumerating them.
+ *
+ * The CSRF guard runs first even so, and even though nothing here rides on a
+ * cookie. Every mutating handler validates `Origin`, that rule is enforced
+ * against the route tree rather than a list, and an endpoint that sweeps
+ * storage is the last place to start carving exceptions into it. It costs a
+ * legitimate caller nothing: a scheduler sends no `Origin` at all, and a
+ * missing one is allowed by design (see `origin.ts`).
  */
 
 export const dynamic = 'force-dynamic';
@@ -132,6 +140,12 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ job: string }> },
 ): Promise<Response> {
+  // Layer 2 of the CSRF defence (docs/09 §5), same as every other mutating
+  // route. Ahead of the token check because it is the invariant, not a
+  // per-route judgement call.
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
   const { job } = await context.params;
 
   // Both failures answer the same way on purpose: an unauthorised caller must

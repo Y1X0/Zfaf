@@ -1,0 +1,44 @@
+# The timer for the scheduled jobs (ADR-0023).
+#
+# It exists because the jobs it triggers used to run inside a process that
+# never exits, and no free platform offers one. Cron Triggers are on
+# Cloudflare's free plan (three per Worker, which is exactly what this uses),
+# so the *timer* is free even though the *work* still needs a real CPU — and
+# the work stays where the CPU is, behind the endpoint this calls.
+#
+# It is deliberately the dumbest thing that could work: no database, no
+# storage, no business logic, no dependencies. If this Worker had opinions it
+# would be a second place for them to drift from the ones in `packages/core`.
+#
+#   npx wrangler deploy            # from this directory
+#   npx wrangler secret put CRON_SECRET
+#
+# ⚠️ Not deployed. Deploying it is a deliberate act, like everything else under
+# infra/ (docs/22 §4).
+name = "zfaf-cron"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# UTC, and the intervals are chosen against two metered free limits rather than
+# taste: every firing wakes the web service (Render free grants 750 instance
+# hours a month) and every wake queries Postgres (Neon free grants 100
+# compute-hours). Flushing views every minute, as the worker did, would burn
+# both on a product nobody is using yet.
+[triggers]
+crons = [
+  # The media sweep and the redrive. Hourly, because the redrive's own window
+  # is fifteen minutes and anything more frequent races encodes that are
+  # merely slow.
+  "0 * * * *",
+  # Invitation expiry. Daily is the resolution the product needs: an
+  # invitation expires on a date, not at a minute.
+  "17 3 * * *",
+  # Buffered view counts. Every five minutes rather than every sixty seconds —
+  # a couple refreshing their dashboard still sees a view they generated, and
+  # the instance sleeps for the rest of the hour.
+  "*/5 * * * *",
+]
+
+[vars]
+# The deployment this drives. Overridden per environment; never a secret.
+ZFAF_BASE_URL = "https://zfaf.app"

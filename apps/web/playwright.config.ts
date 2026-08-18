@@ -54,6 +54,14 @@ const PORT = Number(process.env['E2E_PORT'] ?? 3100);
  */
 const remoteBaseUrl = process.env['E2E_BASE_URL'];
 
+/**
+ * Which media adapter the local server is started with (ADR-0023).
+ *
+ * Two deployments are supported, so both have to be exercised; the suite is
+ * identical for each, and only the server's configuration changes.
+ */
+const mediaDispatch = process.env['MEDIA_DISPATCH'] === 'inline' ? 'inline' : 'queue';
+
 // HTTPS, because the session cookie is `__Host-` prefixed and browsers refuse
 // that prefix over plain HTTP. Testing over HTTP would have meant weakening
 // the cookie for tests, which is the one thing a security test must not do.
@@ -180,10 +188,25 @@ function localWebServer() {
        * same shape: `cdn.zfaf.app` in front of R2, never R2's raw address.
        */
       STORAGE_PUBLIC_BASE_URL: `${baseURL}/zfaf-media`,
-      // The media worker runs alongside the app: an upload nobody processes
-      // never becomes a photograph, because the document only takes a URL once
-      // the worker reports `ready`.
-      E2E_START_WORKER: '1',
+      /**
+       * Which media adapter the suite exercises (ADR-0023).
+       *
+       * `queue` by default, and then the worker runs alongside the app: an
+       * upload nobody processes never becomes a photograph, because the
+       * document only takes a URL once the worker reports `ready`.
+       *
+       * `MEDIA_DISPATCH=inline pnpm e2e` runs the zero-cost deployment
+       * instead, and **starts no worker at all** — which is the point. The
+       * journey suite is unchanged either way, because the browser polls for
+       * `ready` and has no opinion about who encoded the image. A path that
+       * only passes with the other path's worker running would not be a second
+       * path; it would be the first one wearing a different name.
+       */
+      MEDIA_DISPATCH: mediaDispatch,
+      E2E_START_WORKER: mediaDispatch === 'inline' ? '0' : '1',
+      // The redrive's endpoint is closed without this, and production refuses
+      // to boot on `inline` without it. Not a credential; nothing reaches it.
+      CRON_SECRET: 'e2e-cron-secret-value-at-least-32-characters-long',
       /**
        * The client address the terminator stamps on a request that arrives
        * without one — which is every request from `journey.spec.ts`. See the
