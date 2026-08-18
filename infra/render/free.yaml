@@ -1,0 +1,153 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Zfaf — the zero-cost deployment (ADR-0023, docs/25, docs/26).
+#
+#                        ⚠️  REVIEW ONLY — NOT APPLIED  ⚠️
+#
+# This does not replace `render.yaml`. That file is the topology ADR-0022
+# chose — a web service and a separate worker — and it stays valid, tested and
+# deployable; it is the way back, and going back is a plan value plus a
+# redeploy rather than a rewrite.
+#
+# This one exists because that topology cannot be run for $0. Render has no
+# free instance type for a background worker at all, and its free Postgres
+# expires and is deleted 44 days after creation. So the work moves rather than
+# the architecture:
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  Cloudflare  —  DNS · TLS · CDN · cache purge · cron trigger        │
+#   └───────────────┬──────────────────────────────────┬──────────────────┘
+#                   │  (HTTP)                          │  (HTTP, hourly)
+#                   ▼                                  ▼
+#            ┌────────────────────────────────────────────┐
+#            │  zfaf-web-free   ·  Render free · Docker    │
+#            │  serves pages, signs uploads, AND encodes   │
+#            │  photographs in the request (MEDIA_DISPATCH │
+#            │  = inline), and runs the scheduled jobs     │
+#            └───┬──────────────────┬──────────────────┬───┘
+#                ▼                  ▼                  ▼
+#         ┌────────────┐   ┌────────────────┐   ┌──────────────┐
+#         │ Neon free  │   │ zfaf-keyvalue  │   │ B2 / R2      │
+#         │ Postgres   │   │ Render free    │   │ media bucket │
+#         └────────────┘   └────────────────┘   └──────────────┘
+#
+# What this costs, stated plainly rather than buried: the service sleeps after
+# fifteen minutes and a cold start is 30–60 seconds; the key-value store does
+# not persist, so a restart can lose an in-flight encode, which is what the
+# `redrive-media` job exists to repair; and nothing here gives point-in-time
+# database recovery.
+#
+# It contains no secret and never will. `sync: false` means "a person types
+# this into the dashboard".
+# ═══════════════════════════════════════════════════════════════════════════
+
+previewsEnabled: false
+
+services:
+  - type: web
+    name: zfaf-web-free
+    runtime: docker
+    repo: https://github.com/y1x0/zfaf
+    branch: claude/wedding-invitation-saas-ecfcdg
+    region: frankfurt
+    # The whole point. 512 MB and 0.1 CPU, proven to hold the images by the
+    # Free-tier fit workflow, and proven to hold a 12-megapixel encode by
+    # measurement (161 MiB peak) rather than by hope.
+    plan: free
+    dockerfilePath: ./infra/docker/web.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: false
+    numInstances: 1
+    # No `preDeployCommand`: Render does not offer one on a free instance.
+    # Migrations and `db:templates` run from GitHub Actions against the same
+    # database, before the deploy — see docs/27.
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Neon, not a Render database: the free Render Postgres expires after 30
+      # days and is deleted 14 days later, which for a table holding a couple's
+      # invitation is not a tier, it is a scheduled outage.
+      - key: DATABASE_URL
+        sync: false
+      # A Redis-compatible store. Either the free Render one below, or Upstash
+      # — which became viable again the moment the always-on BullMQ worker
+      # stopped costing 159,000 commands a day for doing nothing (docs/25 §5-أ).
+      - key: REDIS_URL
+        sync: false
+      - fromGroup: zfaf-config-free
+      - fromGroup: zfaf-secrets
+
+  # Rate limits, the rotating analytics salt and the view buffer. Not a queue
+  # any more: with `MEDIA_DISPATCH=inline` there is no BullMQ in this topology.
+  - type: keyvalue
+    name: zfaf-keyvalue
+    region: frankfurt
+    plan: free
+    # `noeviction` still, and now for a different reason. The queue is gone, so
+    # nothing here loses a job — but a rate limiter that silently stops
+    # counting because the store evicted its keys is a rate limiter that is not
+    # limiting anything, and it fails open without saying so.
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+envVarGroups:
+  - name: zfaf-config-free
+    envVars:
+      - key: PUBLIC_BASE_URL
+        value: https://zfaf.app
+      - key: DEFAULT_MARKET
+        value: SA
+      # `s3`, not `r2`: the same adapter serves any S3-compatible bucket, and
+      # Backblaze B2 needs no card while enabling R2 does (docs/25 §3.5).
+      # ADR-0007 is unaffected — this is exactly what the abstraction is for.
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: STORAGE_REGION
+        value: auto
+      - key: STORAGE_BUCKET_MEDIA
+        value: zfaf-media
+      - key: STORAGE_PUBLIC_BASE_URL
+        value: https://cdn.zfaf.app
+      - key: MAIL_DRIVER
+        value: resend
+      - key: MAIL_FROM_ADDRESS
+        value: no-reply@zfaf.app
+      - key: MAIL_FROM_NAME
+        value: Zfaf
+      # The line that makes this deployment what it is (ADR-0023). Every other
+      # difference in this file follows from it.
+      - key: MEDIA_DISPATCH
+        value: inline
+
+  # Deliberately the same group name as `render.yaml` uses: the eleven values
+  # are the same eleven, and typing them twice is how two deployments end up
+  # with two different session secrets.
+  - name: zfaf-secrets
+    envVars:
+      - key: SESSION_SECRET
+        sync: false
+      - key: TOTP_ENCRYPTION_KEY
+        sync: false
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: MAIL_RESEND_API_KEY
+        sync: false
+      - key: CDN_ZONE_ID
+        sync: false
+      - key: CDN_API_TOKEN
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: HEALTH_CHECK_TOKEN
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      # Required in production whenever MEDIA_DISPATCH is `inline`: `parseEnv`
+      # refuses to boot without it, because the redrive job is the only thing
+      # replacing BullMQ's retry (ADR-0023 §4).
+      - key: CRON_SECRET
+        sync: false

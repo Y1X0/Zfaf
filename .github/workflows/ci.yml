@@ -267,6 +267,23 @@ jobs:
         env:
           CHROMIUM_PATH: ''
 
+      # The zero-cost deployment, on the same suites (ADR-0023).
+      #
+      # `MEDIA_DISPATCH=inline` starts the server with no worker process at all
+      # and encodes in the request instead. Two paths ship, so two paths are
+      # tested — an untested second path is not an alternative, it is dead code
+      # that will be discovered broken on the day it is switched on.
+      #
+      # Only the suites that upload are worth repeating. The rest of the suite
+      # never touches media and would prove the same thing twice.
+      - name: End-to-end, inline media (390px phone)
+        run: >-
+          pnpm --filter @zfaf/web exec playwright test --project=mobile-390
+          journey.spec.ts scheduled-jobs.spec.ts
+        env:
+          CHROMIUM_PATH: ''
+          MEDIA_DISPATCH: inline
+
       # The budgets, measured rather than estimated, against the standalone
       # server the deployment uses. Three surfaces, two separate public budgets
       # that must not be merged: /i/[slug] ≤ 90 KB (ADR-0020) and the marketing

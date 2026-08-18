@@ -147,10 +147,6 @@ function readSchema() {
 
 // ── The blueprint ──────────────────────────────────────────────────────────
 
-const blueprintPath = resolve(root, 'render.yaml');
-const blueprintText = readFileSync(blueprintPath, 'utf8');
-const blueprint = readYaml(blueprintText);
-
 const schema = readSchema();
 const schemaNames = new Set(schema.map((entry) => entry.name));
 
@@ -160,267 +156,313 @@ if (schema.length < 20) {
   );
 }
 
-const services = Array.isArray(blueprint.services) ? blueprint.services : [];
-const groups = Array.isArray(blueprint.envVarGroups) ? blueprint.envVarGroups : [];
-const databases = Array.isArray(blueprint.databases) ? blueprint.databases : [];
-
-if (services.length === 0) problems.push('render.yaml declares no services.');
-if (databases.length === 0) problems.push('render.yaml declares no database.');
-
 /**
- * The branch each service deploys from must actually exist.
+ * Every blueprint this repository can be deployed from.
  *
- * This blueprint said `branch: main` for both services while the repository
- * had **no `main` at all** — one branch, and a different name. Render would
- * have been pointed at a ref that does not resolve, and the failure arrives at
- * provisioning time, in a dashboard, with a Postgres instance already created
- * and billing.
+ * There are two, and both are real (ADR-0023). `render.yaml` is the topology
+ * ADR-0022 chose — a web service and a separate worker — and it is the way
+ * back. `infra/render/free.yaml` is the zero-cost deployment: one free web
+ * service that encodes in the request, with the database and the timer living
+ * outside Render entirely.
  *
- * Nothing else catches it. The YAML is valid, the schema check passes, the
- * gate builds the images from the working tree rather than from the branch —
- * every existing check is blind to a branch name being wrong, because none of
- * them ever resolves it.
- *
- * Local refs first, then the remote-tracking ones: a fresh CI checkout has the
- * branch it checked out, and a developer's clone usually has both.
+ * Both are checked, and that is the point of the list. A second blueprint that
+ * nothing validates is a second place for a variable to be forgotten or
+ * misspelled, and the failure arrives at the end of a deploy either way.
  */
-function branchExists(branch) {
-  for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
-    try {
-      execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], {
-        cwd: root,
-        stdio: 'ignore',
-      });
-      return true;
-    } catch {
-      // Not this ref. Try the next, then report.
-    }
-  }
-  return false;
+const BLUEPRINTS = ['render.yaml', 'infra/render/free.yaml'];
+
+for (const name of BLUEPRINTS) {
+  checkBlueprint(name);
 }
 
-let gitAvailable = true;
-try {
-  execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' });
-} catch {
-  gitAvailable = false;
-}
-
-for (const service of services) {
-  // Only the services built from the repository. A key-value store has no
-  // branch and declaring one would be the error.
-  if (!service.repo) continue;
-
-  if (!service.branch) {
-    problems.push(`${service.name}: declares a repo but no branch to deploy from.`);
-    continue;
+function checkBlueprint(name) {
+  const blueprintPath = resolve(root, name);
+  if (!existsSync(blueprintPath)) {
+    problems.push(`${name} is listed as a deployment blueprint but does not exist.`);
+    return;
   }
-  if (!gitAvailable) {
-    warnings.push(
-      `${service.name}: branch "${service.branch}" was not verified — this is not a git checkout, so no ref could be resolved.`,
-    );
-    continue;
-  }
-  if (!branchExists(service.branch)) {
-    problems.push(
-      `${service.name}: branch "${service.branch}" does not exist in this repository. Render would be pointed at a ref that does not resolve.`,
-    );
-  }
-}
+  const blueprintText = readFileSync(blueprintPath, 'utf8');
+  const blueprint = readYaml(blueprintText);
 
-const groupsByName = new Map(groups.map((group) => [group.name, group]));
+  const services = Array.isArray(blueprint.services) ? blueprint.services : [];
+  const groups = Array.isArray(blueprint.envVarGroups) ? blueprint.envVarGroups : [];
+  const databases = Array.isArray(blueprint.databases) ? blueprint.databases : [];
 
-/** Every variable name a service ends up with, group membership included. */
-function variablesFor(service) {
-  const names = new Map();
-  for (const entry of service.envVars ?? []) {
-    if (entry.fromGroup) {
-      const group = groupsByName.get(entry.fromGroup);
-      if (!group) {
-        problems.push(
-          `${service.name}: references env var group "${entry.fromGroup}", which is not defined in this blueprint.`,
-        );
-        continue;
+  if (services.length === 0) problems.push(`${name} declares no services.`);
+  /**
+   * No rule about `databases:` here on purpose.
+   *
+   * The paid blueprint declares one; the free blueprint deliberately does not,
+   * because its Postgres lives off-platform (docs/25 §3.3 — Render's free
+   * database expires and is deleted). What actually matters either way is that
+   * `DATABASE_URL` reaches every service, and the required-variable check
+   * below enforces that without caring where the value comes from.
+   */
+
+  /**
+   * The branch each service deploys from must actually exist.
+   *
+   * This blueprint said `branch: main` for both services while the repository
+   * had **no `main` at all** — one branch, and a different name. Render would
+   * have been pointed at a ref that does not resolve, and the failure arrives at
+   * provisioning time, in a dashboard, with a Postgres instance already created
+   * and billing.
+   *
+   * Nothing else catches it. The YAML is valid, the schema check passes, the
+   * gate builds the images from the working tree rather than from the branch —
+   * every existing check is blind to a branch name being wrong, because none of
+   * them ever resolves it.
+   *
+   * Local refs first, then the remote-tracking ones: a fresh CI checkout has the
+   * branch it checked out, and a developer's clone usually has both.
+   */
+  function branchExists(branch) {
+    for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
+      try {
+        execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], {
+          cwd: root,
+          stdio: 'ignore',
+        });
+        return true;
+      } catch {
+        // Not this ref. Try the next, then report.
       }
-      for (const variable of group.envVars ?? []) names.set(variable.key, variable);
+    }
+    return false;
+  }
+
+  let gitAvailable = true;
+  try {
+    execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' });
+  } catch {
+    gitAvailable = false;
+  }
+
+  for (const service of services) {
+    // Only the services built from the repository. A key-value store has no
+    // branch and declaring one would be the error.
+    if (!service.repo) continue;
+
+    if (!service.branch) {
+      problems.push(`${service.name}: declares a repo but no branch to deploy from.`);
       continue;
     }
-    if (entry.key) names.set(entry.key, entry);
-  }
-  return names;
-}
-
-/**
- * Defaults that are correct for a laptop and wrong for production.
- *
- * `parseEnv` already refuses both at boot; requiring them here means the
- * refusal is discovered while reading a blueprint rather than while watching a
- * deploy fail.
- */
-const MUST_BE_EXPLICIT = ['STORAGE_DRIVER', 'MAIL_DRIVER'];
-
-/**
- * Optional in the schema, expected in production.
- *
- * Warnings rather than failures, deliberately: the application runs correctly
- * without any of them, and a check that refuses to pass without a Sentry
- * account would be a check that gets commented out.
- */
-const EXPECTED_IN_PRODUCTION = ['SENTRY_DSN', 'CDN_ZONE_ID', 'CDN_API_TOKEN', 'HEALTH_CHECK_TOKEN'];
-
-/** Variables whose value may never appear in this file. */
-const SECRETS = new Set([
-  'SESSION_SECRET',
-  'TOTP_ENCRYPTION_KEY',
-  'STORAGE_ENDPOINT',
-  'STORAGE_ACCESS_KEY_ID',
-  'STORAGE_SECRET_ACCESS_KEY',
-  'MAIL_SMTP_URL',
-  'MAIL_RESEND_API_KEY',
-  'CDN_ZONE_ID',
-  'CDN_API_TOKEN',
-  'SENTRY_DSN',
-  'HEALTH_CHECK_TOKEN',
-  'TURNSTILE_SECRET_KEY',
-  'GOOGLE_OAUTH_CLIENT_SECRET',
-  'DATABASE_URL',
-  'REDIS_URL',
-]);
-
-const applicationServices = services.filter(
-  (service) => service.type === 'web' || service.type === 'worker',
-);
-
-if (applicationServices.length === 0) {
-  problems.push('render.yaml declares no web or worker service to check.');
-}
-
-for (const service of applicationServices) {
-  const variables = variablesFor(service);
-  const where = `${service.name} (${service.type})`;
-
-  for (const entry of schema) {
-    if (entry.required && !variables.has(entry.name)) {
-      problems.push(
-        `${where}: ${entry.name} is required by the environment schema and is not wired.`,
+    if (!gitAvailable) {
+      warnings.push(
+        `${service.name}: branch "${service.branch}" was not verified — this is not a git checkout, so no ref could be resolved.`,
       );
+      continue;
     }
-  }
-  for (const name of MUST_BE_EXPLICIT) {
-    if (!variables.has(name)) {
+    if (!branchExists(service.branch)) {
       problems.push(
-        `${where}: ${name} must be set explicitly — its schema default is a local development value.`,
-      );
-    }
-  }
-  for (const name of EXPECTED_IN_PRODUCTION) {
-    if (!variables.has(name)) warnings.push(`${where}: ${name} is not wired.`);
-  }
-  for (const [name, entry] of variables) {
-    if (!schemaNames.has(name)) {
-      problems.push(
-        `${where}: ${name} is not a variable the application reads — nothing would ever notice it is wrong.`,
-      );
-    }
-    if (SECRETS.has(name) && entry.value !== undefined && entry.value !== null) {
-      problems.push(
-        `${where}: ${name} carries a literal value in render.yaml. Secrets are declared "sync: false" and typed into the dashboard.`,
+        `${service.name}: branch "${service.branch}" does not exist in this repository. Render would be pointed at a ref that does not resolve.`,
       );
     }
   }
 
-  if (service.autoDeploy !== false) {
+  const groupsByName = new Map(groups.map((group) => [group.name, group]));
+
+  /** Every variable name a service ends up with, group membership included. */
+  function variablesFor(service) {
+    const names = new Map();
+    for (const entry of service.envVars ?? []) {
+      if (entry.fromGroup) {
+        const group = groupsByName.get(entry.fromGroup);
+        if (!group) {
+          problems.push(
+            `${service.name}: references env var group "${entry.fromGroup}", which is not defined in this blueprint.`,
+          );
+          continue;
+        }
+        for (const variable of group.envVars ?? []) names.set(variable.key, variable);
+        continue;
+      }
+      if (entry.key) names.set(entry.key, entry);
+    }
+    return names;
+  }
+
+  /**
+   * Defaults that are correct for a laptop and wrong for production.
+   *
+   * `parseEnv` already refuses both at boot; requiring them here means the
+   * refusal is discovered while reading a blueprint rather than while watching a
+   * deploy fail.
+   */
+  const MUST_BE_EXPLICIT = ['STORAGE_DRIVER', 'MAIL_DRIVER'];
+
+  /**
+   * Optional in the schema, expected in production.
+   *
+   * Warnings rather than failures, deliberately: the application runs correctly
+   * without any of them, and a check that refuses to pass without a Sentry
+   * account would be a check that gets commented out.
+   */
+  const EXPECTED_IN_PRODUCTION = [
+    'SENTRY_DSN',
+    'CDN_ZONE_ID',
+    'CDN_API_TOKEN',
+    'HEALTH_CHECK_TOKEN',
+  ];
+
+  /** Variables whose value may never appear in this file. */
+  const SECRETS = new Set([
+    'SESSION_SECRET',
+    'TOTP_ENCRYPTION_KEY',
+    'STORAGE_ENDPOINT',
+    'STORAGE_ACCESS_KEY_ID',
+    'STORAGE_SECRET_ACCESS_KEY',
+    'MAIL_SMTP_URL',
+    'MAIL_RESEND_API_KEY',
+    'CDN_ZONE_ID',
+    'CDN_API_TOKEN',
+    'SENTRY_DSN',
+    'HEALTH_CHECK_TOKEN',
+    'TURNSTILE_SECRET_KEY',
+    'GOOGLE_OAUTH_CLIENT_SECRET',
+    'DATABASE_URL',
+    'REDIS_URL',
+  ]);
+
+  const applicationServices = services.filter(
+    (service) => service.type === 'web' || service.type === 'worker',
+  );
+
+  if (applicationServices.length === 0) {
+    problems.push(`${name} declares no web or worker service to check.`);
+  }
+
+  for (const service of applicationServices) {
+    const variables = variablesFor(service);
+    const where = `${service.name} (${service.type})`;
+
+    for (const entry of schema) {
+      if (entry.required && !variables.has(entry.name)) {
+        problems.push(
+          `${where}: ${entry.name} is required by the environment schema and is not wired.`,
+        );
+      }
+    }
+    for (const name of MUST_BE_EXPLICIT) {
+      if (!variables.has(name)) {
+        problems.push(
+          `${where}: ${name} must be set explicitly — its schema default is a local development value.`,
+        );
+      }
+    }
+    for (const name of EXPECTED_IN_PRODUCTION) {
+      if (!variables.has(name)) warnings.push(`${where}: ${name} is not wired.`);
+    }
+    for (const [name, entry] of variables) {
+      if (!schemaNames.has(name)) {
+        problems.push(
+          `${where}: ${name} is not a variable the application reads — nothing would ever notice it is wrong.`,
+        );
+      }
+      if (SECRETS.has(name) && entry.value !== undefined && entry.value !== null) {
+        problems.push(
+          `${where}: ${name} carries a literal value in ${name}. Secrets are declared "sync: false" and typed into the dashboard.`,
+        );
+      }
+    }
+
+    if (service.autoDeploy !== false) {
+      problems.push(
+        `${where}: autoDeploy must be false — docs/14 §4 puts a human gate in front of production.`,
+      );
+    }
+    if (service.runtime === 'docker') {
+      const dockerfile = service.dockerfilePath;
+      if (!dockerfile || !existsSync(resolve(root, dockerfile))) {
+        problems.push(`${where}: dockerfilePath "${dockerfile ?? '(unset)'}" does not exist.`);
+      }
+    }
+  }
+
+  // ── Values a reviewer can check by reading them ────────────────────────────
+
+  const configured = new Map();
+  for (const group of groups) {
+    for (const variable of group.envVars ?? []) {
+      if (variable.value !== undefined && variable.value !== null) {
+        configured.set(variable.key, String(variable.value));
+      }
+    }
+  }
+
+  if (configured.get('MAIL_DRIVER') === 'noop') {
     problems.push(
-      `${where}: autoDeploy must be false — docs/14 §4 puts a human gate in front of production.`,
+      `${name}: MAIL_DRIVER is "noop" — verification and reset links would be silently discarded.`,
     );
   }
-  if (service.runtime === 'docker') {
-    const dockerfile = service.dockerfilePath;
-    if (!dockerfile || !existsSync(resolve(root, dockerfile))) {
-      problems.push(`${where}: dockerfilePath "${dockerfile ?? '(unset)'}" does not exist.`);
+  if (configured.get('STORAGE_DRIVER') === 'minio') {
+    problems.push(`${name}: STORAGE_DRIVER is "minio", which is the local development driver.`);
+  }
+  for (const key of ['PUBLIC_BASE_URL', 'STORAGE_PUBLIC_BASE_URL']) {
+    const value = configured.get(key);
+    if (value && !value.startsWith('https://')) {
+      problems.push(`${name}: ${key} must use https in production.`);
     }
   }
-}
 
-// ── Values a reviewer can check by reading them ────────────────────────────
-
-const configured = new Map();
-for (const group of groups) {
-  for (const variable of group.envVars ?? []) {
-    if (variable.value !== undefined && variable.value !== null) {
-      configured.set(variable.key, String(variable.value));
-    }
+  const web = services.find((service) => service.type === 'web');
+  if (web && !web.healthCheckPath) {
+    problems.push(
+      `${name}: the web service declares no healthCheckPath; a failed deploy would go into rotation.`,
+    );
   }
-}
-
-if (configured.get('MAIL_DRIVER') === 'noop') {
-  problems.push('MAIL_DRIVER is "noop": verification and reset links would be silently discarded.');
-}
-if (configured.get('STORAGE_DRIVER') === 'minio') {
-  problems.push('STORAGE_DRIVER is "minio", which is the local development driver.');
-}
-for (const key of ['PUBLIC_BASE_URL', 'STORAGE_PUBLIC_BASE_URL']) {
-  const value = configured.get(key);
-  if (value && !value.startsWith('https://')) {
-    problems.push(`${key} must use https in production.`);
+  if (web && web.healthCheckPath === '/api/health/deep') {
+    problems.push(
+      `${name}: healthCheckPath points at the deep probe — a transient dependency blip would pull every instance at once (docs/14 §11).`,
+    );
   }
-}
 
-const web = services.find((service) => service.type === 'web');
-if (web && !web.healthCheckPath) {
-  problems.push(
-    'The web service declares no healthCheckPath; a failed deploy would go into rotation.',
-  );
-}
-if (web && web.healthCheckPath === '/api/health/deep') {
-  problems.push(
-    'healthCheckPath points at the deep probe — a transient dependency blip would pull every instance at once (docs/14 §11).',
-  );
-}
-
-const keyValue = services.find((service) => service.type === 'keyvalue');
-if (keyValue && keyValue.maxmemoryPolicy !== 'noeviction') {
-  problems.push(
-    'The key-value store must use maxmemoryPolicy "noeviction": BullMQ loses jobs under eviction, and a lost job is an upload that never becomes a thumbnail.',
-  );
-}
-if (keyValue && !Array.isArray(keyValue.ipAllowList)) {
-  warnings.push(
-    'The key-value store has no empty ipAllowList; confirm it is not reachable from the public internet.',
-  );
-}
-
-for (const database of databases) {
-  if (database.plan === 'free') {
-    problems.push(`Database "${database.name}" is on the free plan, which expires and is deleted.`);
+  const keyValue = services.find((service) => service.type === 'keyvalue');
+  if (keyValue && keyValue.maxmemoryPolicy !== 'noeviction') {
+    problems.push(
+      `${name}: the key-value store must use maxmemoryPolicy "noeviction" — BullMQ loses jobs under eviction, and a lost job is an upload that never becomes a thumbnail.`,
+    );
   }
-  if (!Array.isArray(database.ipAllowList)) {
+  if (keyValue && !Array.isArray(keyValue.ipAllowList)) {
     warnings.push(
-      `Database "${database.name}" has no empty ipAllowList; confirm it is not reachable from the public internet.`,
+      `${name}: the key-value store has no empty ipAllowList; confirm it is not reachable from the public internet.`,
     );
   }
-}
 
-/**
- * A last, blunt sweep for a credential pasted into the blueprint by accident.
- *
- * Patterns rather than entropy: this runs on every verify and a false positive
- * that blocks a commit is worse than the narrow miss.
- */
-const SECRET_SHAPES = [
-  [/\bre_[A-Za-z0-9_-]{12,}/, 'a Resend API key'],
-  [/\bsk_(live|test)_[A-Za-z0-9]{10,}/, 'a Stripe-style secret key'],
-  [
-    /\b(postgres|postgresql|redis|rediss):\/\/[^\s:]+:[^\s@]+@/,
-    'a connection string with a password',
-  ],
-  [/https:\/\/[a-f0-9]{16,}@[a-z0-9.-]*sentry\.io/, 'a Sentry DSN'],
-];
-for (const [pattern, description] of SECRET_SHAPES) {
-  if (pattern.test(blueprintText)) {
-    problems.push(
-      `render.yaml appears to contain ${description}. Nothing secret belongs in a committed file.`,
-    );
+  for (const database of databases) {
+    if (database.plan === 'free') {
+      problems.push(
+        `Database "${database.name}" is on the free plan, which expires and is deleted.`,
+      );
+    }
+    if (!Array.isArray(database.ipAllowList)) {
+      warnings.push(
+        `Database "${database.name}" has no empty ipAllowList; confirm it is not reachable from the public internet.`,
+      );
+    }
+  }
+
+  /**
+   * A last, blunt sweep for a credential pasted into the blueprint by accident.
+   *
+   * Patterns rather than entropy: this runs on every verify and a false positive
+   * that blocks a commit is worse than the narrow miss.
+   */
+  const SECRET_SHAPES = [
+    [/\bre_[A-Za-z0-9_-]{12,}/, 'a Resend API key'],
+    [/\bsk_(live|test)_[A-Za-z0-9]{10,}/, 'a Stripe-style secret key'],
+    [
+      /\b(postgres|postgresql|redis|rediss):\/\/[^\s:]+:[^\s@]+@/,
+      'a connection string with a password',
+    ],
+    [/https:\/\/[a-f0-9]{16,}@[a-z0-9.-]*sentry\.io/, 'a Sentry DSN'],
+  ];
+  for (const [pattern, description] of SECRET_SHAPES) {
+    if (pattern.test(blueprintText)) {
+      problems.push(
+        `${name} appears to contain ${description}. Nothing secret belongs in a committed file.`,
+      );
+    }
   }
 }
 
@@ -543,5 +585,5 @@ if (problems.length > 0) {
 }
 
 console.warn(
-  `✔ render.yaml wires all ${schema.filter((entry) => entry.required).length} required variables for ${applicationServices.length} services, with no secret in the file.`,
+  `✔ ${BLUEPRINTS.length} blueprint(s) wire all ${schema.filter((entry) => entry.required).length} required variables, with no secret in any of them.`,
 );
