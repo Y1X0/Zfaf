@@ -190,6 +190,44 @@ expect_boundary_rejected "libheif-js outside its own module is rejected" \
   "apps/worker/src/__guardrail_heif.ts" \
   "heic-decoder-stays-in-its-module"
 
+# ── docs/22 §4: the provisioner refuses a field it cannot send ──────────────
+#
+# `render.yaml` is the reviewed artefact, and the provisioner's whole claim is
+# that what runs is what was reviewed. That claim rests on one rule: a key it
+# does not know how to send stops the run instead of being dropped. The failure
+# it prevents is the silent one — a blueprint saying `ipAllowList: []` and a
+# database created open to the internet.
+#
+# Checked here rather than in CI-by-hope, because `--mode check` reads a file
+# and talks to nothing: no API key, no network, no resource.
+echo
+echo "Render blueprint:"
+
+if output="$(node scripts/render-provision.mjs --mode check 2>&1)"; then
+  echo "  ✓ render.yaml declares only fields the provisioner can send"
+else
+  echo "  ✗ the provisioner refuses the committed render.yaml"
+  printf '%s\n' "$output" | head -10
+  failures=$((failures + 1))
+fi
+
+# And the same guard against a blueprint that smuggles one in. `diskSizeGB` is
+# a real Render field this provisioner does not send — exactly the shape of
+# thing that must fail loudly rather than be created without.
+BAD_BLUEPRINT="$TMP_DIR/render-unknown-field.yaml"
+sed 's|^    plan: standard$|    plan: standard\n    diskSizeGB: 20|' render.yaml > "$BAD_BLUEPRINT"
+
+if output="$(node scripts/render-provision.mjs --mode check --blueprint "$BAD_BLUEPRINT" 2>&1)"; then
+  echo "  ✗ the provisioner ACCEPTED a blueprint field it cannot send"
+  failures=$((failures + 1))
+elif printf '%s' "$output" | grep -q 'diskSizeGB'; then
+  echo "  ✓ an unknown blueprint field is refused by name"
+else
+  echo "  ✗ refused, but without naming the offending field"
+  printf '%s\n' "$output" | head -10
+  failures=$((failures + 1))
+fi
+
 echo
 if [ "$failures" -gt 0 ]; then
   echo "✗ $failures guardrail(s) did not hold. The architecture is no longer enforced."

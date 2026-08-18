@@ -43,14 +43,30 @@ const root = resolve(import.meta.dirname, '..');
 const API = 'https://api.render.com/v1';
 
 const args = process.argv.slice(2);
-const mode = args.includes('--mode') ? args[args.indexOf('--mode') + 1] : 'preflight';
-if (mode !== 'preflight' && mode !== 'provision') {
-  console.error(`Unknown --mode "${mode}". Use preflight or provision.`);
+const argValue = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+
+const mode = argValue('--mode') ?? 'preflight';
+if (mode !== 'check' && mode !== 'preflight' && mode !== 'provision') {
+  console.error(`Unknown --mode "${mode}". Use check, preflight or provision.`);
   process.exit(2);
 }
 
+/**
+ * The blueprint to read. `render.yaml` unless told otherwise.
+ *
+ * The override exists for one caller: `verify-guardrails.sh`, which points
+ * `--mode check` at a deliberately non-compliant copy and asserts the
+ * fidelity guard refuses it. A guard nobody exercises is a guard nobody
+ * notices has broken — the same reason every other rule in that script is
+ * tested against a violation rather than trusted.
+ */
+const blueprintPath = resolve(root, argValue('--blueprint') ?? 'render.yaml');
+
+// `check` reads a file and talks to nothing, so it needs no credential. Every
+// other mode does, and finding that out after resolving an owner would be a
+// failure halfway through rather than before the first request.
 const apiKey = process.env.RENDER_API_KEY;
-if (!apiKey) {
+if (!apiKey && mode !== 'check') {
   console.error('');
   console.error('✖ RENDER_API_KEY is not set.');
   console.error('');
@@ -144,7 +160,7 @@ function readYaml(text) {
   return value;
 }
 
-const blueprint = readYaml(readFileSync(resolve(root, 'render.yaml'), 'utf8'));
+const blueprint = readYaml(readFileSync(blueprintPath, 'utf8'));
 
 /**
  * Every key this script knows how to send, per resource kind.
@@ -229,6 +245,16 @@ if (refusals.length > 0) {
   process.exit(1);
 }
 
+// `check` is the fidelity guard on its own: parse the blueprint, prove every
+// field can be sent, and stop. No network, no credential, nothing created.
+if (mode === 'check') {
+  console.warn(
+    `✓ ${blueprintPath} declares ${services.length} service(s), ${databases.length} database(s) ` +
+      `and ${groups.length} env group(s), and every field is one this provisioner can send.`,
+  );
+  process.exit(0);
+}
+
 // ── The API ────────────────────────────────────────────────────────────────
 
 async function api(path, init = {}) {
@@ -294,6 +320,44 @@ async function existingGroups() {
 const report = [];
 const record = (kind, name, status, detail = '') => report.push({ kind, name, status, detail });
 
+let reported = false;
+function printReport() {
+  if (reported) return;
+  reported = true;
+  if (report.length === 0) return;
+  console.warn('Resource                     Kind         Status         Detail');
+  console.warn('───────────────────────────────────────────────────────────────────────────');
+  for (const row of report) {
+    console.warn(
+      `${row.name.padEnd(28)} ${row.kind.padEnd(12)} ${row.status.padEnd(14)} ${row.detail}`,
+    );
+  }
+  console.warn('');
+}
+
+/**
+ * A run that dies halfway still says what it created.
+ *
+ * This is not cosmetic. The first `provision` run created both env groups and
+ * then hit a 402 on the database; the report is printed at the end, so it
+ * printed nothing, and the log read as though the account were untouched. A
+ * provisioner whose failure hides its own writes is the drift its whole design
+ * exists to prevent — the next person either re-runs blind or cleans up
+ * resources they were never told about.
+ *
+ * Both handlers, because a throw out of top-level `await` reaches Node one way
+ * on some versions and the other way on others, and the report matters more
+ * than being clever about which.
+ */
+const onFatal = (error) => {
+  printReport();
+  console.error(`✖ Stopped: ${error instanceof Error ? error.message : String(error)}`);
+  console.error('  Anything listed above as created is real and was left in place.');
+  process.exit(1);
+};
+process.on('uncaughtException', onFatal);
+process.on('unhandledRejection', onFatal);
+
 const [svcNow, pgNow, kvNow, grpNow] = await Promise.all([
   existingServices(),
   existingPostgres(),
@@ -307,9 +371,64 @@ const [svcNow, pgNow, kvNow, grpNow] = await Promise.all([
 // carry no value here on purpose — they are typed into the dashboard, and a
 // provisioner that invented one would be writing a credential.
 
+/**
+ * What an env group holds now, by key. Values are compared and never printed.
+ *
+ * The list endpoint does not promise to embed the variables, so the group is
+ * fetched by id. `zfaf-secrets` comes back with real credentials in it, which
+ * is precisely why nothing below ever puts a value in the report — only key
+ * names, and only when something is wrong.
+ */
+async function groupValues(id) {
+  const detail = await api(`/env-groups/${id}`);
+  const vars = detail?.envVars ?? detail?.envGroup?.envVars ?? [];
+  return new Map(vars.map((entry) => [entry.key, entry.value]));
+}
+
+let drifted = 0;
+
 for (const group of groups) {
   if (grpNow.has(group.name)) {
-    record('env group', group.name, 'exists', 'left untouched');
+    /**
+     * "Exists" is not the same as "matches", and only one of them is worth
+     * reporting. A group created once and edited since — or created by a run
+     * that failed partway — leaves the deployed configuration and the reviewed
+     * blueprint as two different objects that merely resemble each other. That
+     * is the exact drift this provisioner exists to prevent, and reporting it
+     * as `left untouched` would be the provisioner asserting a fidelity it did
+     * not check.
+     *
+     * Left untouched either way: overwriting a value a person typed is not a
+     * provisioner's decision. It reports, and stops before creating anything
+     * that would boot against configuration nobody reviewed.
+     */
+    const now = await groupValues(grpNow.get(group.name).id);
+    const declared = (group.envVars ?? []).filter((entry) => entry.value !== undefined);
+    const secretNames = (group.envVars ?? [])
+      .filter((entry) => entry.value === undefined)
+      .map((entry) => entry.key);
+
+    const wrong = declared
+      .filter((entry) => now.get(entry.key) !== String(entry.value))
+      .map((entry) => entry.key);
+    const unset = secretNames.filter((key) => !now.get(key));
+
+    if (wrong.length > 0) {
+      drifted += 1;
+      record(
+        'env group',
+        group.name,
+        'DRIFT',
+        `${wrong.length} value(s) differ from render.yaml: ${wrong.join(', ')}`,
+      );
+      continue;
+    }
+
+    const detail = [
+      `${declared.length} value(s) match`,
+      ...(unset.length > 0 ? [`${unset.length} secret(s) still unset: ${unset.join(', ')}`] : []),
+    ].join(' · ');
+    record('env group', group.name, 'exists', detail);
     continue;
   }
   const declared = (group.envVars ?? []).filter((entry) => entry.value !== undefined);
@@ -342,6 +461,21 @@ for (const group of groups) {
     'created',
     secretNames.length ? `${secretNames.length} secret(s) still to be typed in` : '',
   );
+}
+
+/**
+ * A drifted group stops the run here, before a single resource is created.
+ *
+ * The alternative is worse than a failed run: services created and started
+ * against configuration that is not the configuration anybody read. Which
+ * value differs is a decision for a person — the blueprint may be stale, or
+ * the dashboard may be — and it is not one to make by overwriting.
+ */
+if (drifted > 0) {
+  printReport();
+  console.error(`✖ ${drifted} env group(s) no longer match render.yaml. Nothing further was done.`);
+  console.error('  Reconcile the group in the dashboard, or update render.yaml, then re-run.');
+  process.exit(1);
 }
 
 // ── Postgres ───────────────────────────────────────────────────────────────
@@ -501,14 +635,7 @@ for (const service of services.filter((entry) => entry.type === 'web' || entry.t
 
 // ── Report ─────────────────────────────────────────────────────────────────
 
-console.warn('Resource                     Kind         Status         Detail');
-console.warn('───────────────────────────────────────────────────────────────────────────');
-for (const row of report) {
-  console.warn(
-    `${row.name.padEnd(28)} ${row.kind.padEnd(12)} ${row.status.padEnd(14)} ${row.detail}`,
-  );
-}
-console.warn('');
+printReport();
 
 const failed = report.filter((row) => row.status === 'FAILED');
 if (failed.length > 0) {
