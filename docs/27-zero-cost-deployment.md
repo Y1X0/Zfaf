@@ -18,7 +18,7 @@
 | العامل | Render worker `standard` | **لا يوجد.** الترميز داخل طلب `complete` |
 | المؤقّتات | داخل العامل | **Cloudflare Cron Trigger** → نقطة داخلية |
 | القاعدة | Render Postgres مدفوع | **Neon free** — خارج Render |
-| Redis | Render Key Value `starter` | Render Key Value **free** أو Upstash free |
+| Redis | Render Key Value `starter` | **Upstash free** — وليس Render (§٢-أ) |
 | التخزين | Cloudflare R2 | **Backblaze B2** (بلا بطاقة) أو R2 |
 | الـ migrations | `preDeployCommand` على العامل | **GitHub Actions** — غير متاح على النسخة المجانية |
 
@@ -32,8 +32,25 @@
 | **Backblaze B2** | حاوية `zfaf-media`، ومفتاح تطبيق بصلاحية القراءة والكتابة عليها وحدها | لا |
 | **Resend** | نطاق موثّق (SPF · DKIM · DMARC) ومفتاح API | لا |
 | **Cloudflare** | المنطقة، ورمز API بصلاحية `Cache Purge` عليها وحدها | لا |
+| **Upstash** | قاعدة Redis، ونسخ `REDIS_URL` (بروتوكول Redis لا REST) | لا |
 | **Sentry** | مشروع، ونسخ الـ DSN | لا |
 | **Render** | حساب — والخدمة المجانية بلا بطاقة (§٦) | لا |
+
+### ٢-أ. لماذا Upstash وليس Render Key Value المجاني
+
+لأن Render رفضت، بكلماتها:
+
+```
+POST /key-value → 400: {"message":"cannot have more than 1 free tier Key Value instance"}
+```
+
+الحساب يملك خانة مجانية واحدة، وهي مشغولة بمشروع آخر. **حذف مورد مشروع آخر ليس
+خطوة نشر**، فالبديل هو Upstash — وهو الأفضل أصلًا هنا: يحفظ على القرص، بخلاف
+الطبقة المجانية في Render، فإعادة التشغيل لم تعد تكلّف عدّادات الحدّ المعدّل
+ومخزن المشاهدات.
+
+وقد صار ممكنًا أصلًا لأن عامل BullMQ رحل: عامل خامل كان يكلّف ١٥٩ ألف أمر يوميًا،
+وهو وحده ما كان يتجاوز حدّ ٥٠٠ ألف أمر شهريًا ([docs/25 §٥-أ](25-zero-cost-launch.md)).
 
 ---
 
@@ -67,7 +84,7 @@ Actions → Free stack — migrate → Run workflow
 من `infra/render/free.yaml`. القيم غير السرّية في المخطّط؛ والسرّية تُكتب في
 اللوحة:
 
-`DATABASE_URL` · `REDIS_URL` · `SESSION_SECRET` · `TOTP_ENCRYPTION_KEY` ·
+`DATABASE_URL` (Neon) · `REDIS_URL` (Upstash) · `SESSION_SECRET` · `TOTP_ENCRYPTION_KEY` ·
 `STORAGE_ENDPOINT` · `STORAGE_ACCESS_KEY_ID` · `STORAGE_SECRET_ACCESS_KEY` ·
 `MAIL_RESEND_API_KEY` · `CDN_ZONE_ID` · `CDN_API_TOKEN` · `SENTRY_DSN` ·
 `HEALTH_CHECK_TOKEN` · `TURNSTILE_SECRET_KEY` · **`CRON_SECRET`**

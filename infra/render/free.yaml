@@ -26,15 +26,18 @@
 #            └───┬──────────────────┬──────────────────┬───┘
 #                ▼                  ▼                  ▼
 #         ┌────────────┐   ┌────────────────┐   ┌──────────────┐
-#         │ Neon free  │   │ zfaf-keyvalue  │   │ B2 / R2      │
-#         │ Postgres   │   │ Render free    │   │ media bucket │
+#         │ Neon free  │   │ Upstash free   │   │ B2 / R2      │
+#         │ Postgres   │   │ Redis          │   │ media bucket │
 #         └────────────┘   └────────────────┘   └──────────────┘
 #
+# Only **one** Render resource, which is the other reason this shape works:
+# Render allows a single free key-value instance per account, and this account
+# has already spent it elsewhere.
+#
 # What this costs, stated plainly rather than buried: the service sleeps after
-# fifteen minutes and a cold start is 30–60 seconds; the key-value store does
-# not persist, so a restart can lose an in-flight encode, which is what the
-# `redrive-media` job exists to repair; and nothing here gives point-in-time
-# database recovery.
+# fifteen minutes and a cold start is 30–60 seconds; a restart mid-encode still
+# leaves an asset stranded, which is what the `redrive-media` job exists to
+# repair; and nothing here gives point-in-time database recovery.
 #
 # It contains no secret and never will. `sync: false` means "a person types
 # this into the dashboard".
@@ -69,26 +72,25 @@ services:
       # invitation is not a tier, it is a scheduled outage.
       - key: DATABASE_URL
         sync: false
-      # A Redis-compatible store. Either the free Render one below, or Upstash
-      # — which became viable again the moment the always-on BullMQ worker
-      # stopped costing 159,000 commands a day for doing nothing (docs/25 §5-أ).
+      # Upstash, and there is no Render key-value in this blueprint at all.
+      #
+      # Two reasons, and the first is not a preference: Render answers
+      # `cannot have more than 1 free tier Key Value instance`, and this
+      # account's one free slot is already spent on another project. Deleting
+      # somebody else's store to make room is not a deployment step.
+      #
+      # The second reason is that Upstash is the better answer anyway. It
+      # became viable the moment the always-on BullMQ worker stopped costing
+      # 159,000 commands a day for doing nothing (docs/25 §5-أ), and unlike
+      # Render's free tier it persists to disk — so a restart no longer costs
+      # the view buffer and the rate-limit counters.
+      #
+      # What lives here: rate limits, the rotating analytics salt, the view
+      # buffer. Not a queue — `MEDIA_DISPATCH=inline` has no BullMQ.
       - key: REDIS_URL
         sync: false
       - fromGroup: zfaf-config-free
       - fromGroup: zfaf-secrets
-
-  # Rate limits, the rotating analytics salt and the view buffer. Not a queue
-  # any more: with `MEDIA_DISPATCH=inline` there is no BullMQ in this topology.
-  - type: keyvalue
-    name: zfaf-keyvalue
-    region: frankfurt
-    plan: free
-    # `noeviction` still, and now for a different reason. The queue is gone, so
-    # nothing here loses a job — but a rate limiter that silently stops
-    # counting because the store evicted its keys is a rate limiter that is not
-    # limiting anything, and it fails open without saying so.
-    maxmemoryPolicy: noeviction
-    ipAllowList: []
 
 envVarGroups:
   - name: zfaf-config-free
