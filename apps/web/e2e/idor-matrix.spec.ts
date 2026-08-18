@@ -167,6 +167,21 @@ const MATRIX: readonly RouteExpectation[] = [
   },
 
   // ── public surfaces ───────────────────────────────────────────────────────
+  // Media redirect is a non-API route that serves public-display media to guests.
+  {
+    route: 'm/[...key]',
+    method: 'GET',
+    path: (fixtures) =>
+      `/m/media/${fixtures.owned.invitationId}/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000001/w256.jpg`,
+    publicBecause: 'guests need to load images from public invitations without authentication',
+    expect: {
+      anonymous: 'allowed',
+      stranger: 'allowed',
+      owner: 'allowed',
+      staffPending: 'allowed',
+      staff: 'allowed',
+    },
+  },
   {
     route: 'public/analytics/event',
     method: 'POST',
