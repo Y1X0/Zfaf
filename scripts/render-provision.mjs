@@ -564,6 +564,10 @@ for (const service of services.filter((entry) => entry.type === 'web' || entry.t
   if (svcNow.has(service.name)) {
     const found = svcNow.get(service.name);
     record('service', service.name, 'exists', found.serviceDetails?.url ?? found.type ?? '');
+    // Left alone in every other respect — but its group links are reconciled,
+    // because a service created by a run that died before linking is exactly
+    // the state that otherwise never repairs itself.
+    if (mode === 'provision') await linkGroups(service, found.id);
     continue;
   }
   if (mode === 'preflight') {
@@ -622,19 +626,50 @@ for (const service of services.filter((entry) => entry.type === 'web' || entry.t
   record('service', service.name, 'created', id ?? '');
 
   // Groups are linked after creation; the create payload takes plain vars only.
+  await linkGroups(service, id);
+}
+
+/**
+ * Attaches a service to every env var group its blueprint declares.
+ *
+ * Run for an existing service as well as a new one, and that is the point
+ * rather than tidiness. A service is created first and linked second, so any
+ * failure between the two — the wrong endpoint, a network blip, a run killed
+ * mid-flight — leaves a service that exists with no configuration attached.
+ * Skipping the link because the service "already exists" would make that state
+ * permanent and invisible: the next run reports `exists` and moves on.
+ *
+ * Idempotent. Re-linking an already-linked group is not an error worth
+ * stopping for, so a rejection that names the link as existing is reported as
+ * `already linked` rather than raised.
+ */
+async function linkGroups(service, id) {
+  const groupNames = serviceEnvVars(service)
+    .filter((entry) => entry.key === '__group__')
+    .map((entry) => entry.value);
+
   for (const groupName of groupNames) {
     const group = grpNow.get(groupName) ?? (await existingGroups()).get(groupName);
     if (!group) {
       record('link', `${service.name} → ${groupName}`, 'FAILED', 'group not found');
       continue;
     }
-    // `POST /env-groups/{group}/services/{service}` — the link is owned by the
-    // group, not by the service. The mirror image of that path answers a bare
-    // `404 page not found`, which reads like the group or the service is
-    // missing rather than like the route is: the service was created fine and
-    // sat there unlinked while the run reported a not-found.
-    await api(`/env-groups/${group.id}/services/${id}`, { method: 'POST' });
-    record('link', `${service.name} → ${groupName}`, 'linked');
+    try {
+      // `POST /env-groups/{group}/services/{service}` — the link is owned by
+      // the group, not by the service. The mirror image of that path answers a
+      // bare `404 page not found`, which reads like the group or the service
+      // is missing rather than like the route is: the service was created fine
+      // and sat there unlinked while the run reported a not-found.
+      await api(`/env-groups/${group.id}/services/${id}`, { method: 'POST' });
+      record('link', `${service.name} → ${groupName}`, 'linked');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/409|already/i.test(message)) {
+        record('link', `${service.name} → ${groupName}`, 'already linked');
+        continue;
+      }
+      throw error;
+    }
   }
 }
 
