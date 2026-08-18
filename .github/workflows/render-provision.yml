@@ -23,6 +23,12 @@ on:
         default: preflight
         type: choice
         options: [preflight, provision]
+      blueprint:
+        description: 'Which topology to apply. free.yaml is the zero-cost stack (ADR-0023); render.yaml is the paid one and needs a card.'
+        required: true
+        default: infra/render/free.yaml
+        type: choice
+        options: [infra/render/free.yaml, render.yaml]
 
 concurrency:
   group: render-provision
@@ -46,10 +52,13 @@ jobs:
       - name: Record what is being applied
         run: |
           git rev-parse HEAD
-          sha256sum render.yaml
-          git status --porcelain render.yaml || true
+          sha256sum "${{ inputs.blueprint }}"
+          git status --porcelain "${{ inputs.blueprint }}" || true
 
       - name: Apply
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-        run: node scripts/render-provision.mjs --mode "${{ inputs.mode }}"
+        run: |
+          node scripts/render-provision.mjs \
+            --mode "${{ inputs.mode }}" \
+            --blueprint "${{ inputs.blueprint }}"
