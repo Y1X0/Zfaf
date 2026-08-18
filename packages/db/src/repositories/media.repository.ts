@@ -303,6 +303,30 @@ export class PrismaMediaMaintenanceRepository implements MediaMaintenanceReposit
     return rows.map(toRecord);
   }
 
+  /**
+   * Assets a previous run left in `processing` (ADR-0023).
+   *
+   * `updatedAt` and not `createdAt`: `markProcessing` touches the row, so this
+   * measures time since the last attempt rather than since the upload. An
+   * asset redriven once and stalled again therefore becomes eligible again,
+   * which is the whole point.
+   *
+   * `deletedAt: null` because a soft-deleted asset is the purge's business,
+   * not the redrive's — re-encoding something the owner deleted would put
+   * bytes back that they asked us to remove.
+   */
+  async findStuckProcessing(
+    updatedBefore: Date,
+    limit: number,
+  ): Promise<readonly MediaAssetRecord[]> {
+    const rows = await this.prisma.mediaAsset.findMany({
+      where: { status: 'processing', deletedAt: null, updatedAt: { lt: updatedBefore } },
+      orderBy: { updatedAt: 'asc' },
+      take: limit,
+    });
+    return rows.map(toRecord);
+  }
+
   async hardDelete(mediaId: string): Promise<void> {
     await this.prisma.mediaAsset.delete({ where: { id: mediaId } });
   }

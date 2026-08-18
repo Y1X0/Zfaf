@@ -22,7 +22,7 @@ import type {
   StorageProvider,
 } from '../ports/storage-provider.js';
 import { completeUpload, requestUploadUrl } from './upload-media.js';
-import { deleteMedia, sweepMedia } from './manage-media.js';
+import { deleteMedia, redriveStuckMedia, sweepMedia } from './manage-media.js';
 
 /**
  * The upload, deletion and sweep use cases.
@@ -575,13 +575,20 @@ describe('sweeping abandoned and expired media', () => {
   class FakeMaintenance implements MediaMaintenanceRepository {
     stale: MediaAssetRecord[] = [];
     purgeable: MediaAssetRecord[] = [];
+    stuck: MediaAssetRecord[] = [];
     hardDeleted: string[] = [];
+    /** What cutoff the redrive asked for, so the window can be asserted. */
+    stuckBefore: Date | null = null;
 
     async findStalePendingUploads(): Promise<readonly MediaAssetRecord[]> {
       return this.stale;
     }
     async findPurgeableAssets(): Promise<readonly MediaAssetRecord[]> {
       return this.purgeable;
+    }
+    async findStuckProcessing(updatedBefore: Date): Promise<readonly MediaAssetRecord[]> {
+      this.stuckBefore = updatedBefore;
+      return this.stuck;
     }
     async hardDelete(mediaId: string): Promise<void> {
       this.hardDeleted.push(mediaId);
@@ -661,5 +668,86 @@ describe('sweeping abandoned and expired media', () => {
 
     await sweepMedia({ repository, storage, clock: fixedClock(NOW) });
     expect(order).toEqual(['storage', 'row']);
+  });
+
+  /**
+   * The redrive (ADR-0023).
+   *
+   * These are the tests that make `MEDIA_DISPATCH=inline` a supported
+   * deployment rather than a way to lose photographs. The `inline` adapter has
+   * no retry — the process that was encoding simply went away — so everything
+   * BullMQ's backoff used to guarantee has to be reconstructed here, and
+   * anything not asserted below is a guarantee nobody is making.
+   */
+  describe('redriving stuck uploads', () => {
+    it('dispatches every asset the query returned, and counts them', async () => {
+      const repository = new FakeMaintenance();
+      repository.stuck = [asset('stuck-1'), asset('stuck-2')];
+      const dispatched: string[] = [];
+
+      const report = await redriveStuckMedia({
+        repository,
+        clock: fixedClock(NOW),
+        dispatch: async (id) => {
+          dispatched.push(id);
+        },
+      });
+
+      expect(dispatched).toEqual(['stuck-1', 'stuck-2']);
+      expect(report.redriven).toBe(2);
+      expect(report.failures).toEqual([]);
+    });
+
+    it('asks only for assets untouched for the full stuck window', async () => {
+      const repository = new FakeMaintenance();
+
+      await redriveStuckMedia({ repository, clock: fixedClock(NOW), dispatch: async () => {} });
+
+      // Fifteen minutes before "now", to the millisecond. A window that
+      // silently widened would redrive an encode that is merely slow, and two
+      // runners writing the same derivatives is the failure this bounds.
+      expect(repository.stuckBefore?.toISOString()).toBe(
+        new Date(NOW.getTime() - 15 * 60 * 1000).toISOString(),
+      );
+    });
+
+    it('keeps going when one asset fails, and reports which', async () => {
+      const repository = new FakeMaintenance();
+      repository.stuck = [asset('bad'), asset('good')];
+      const dispatched: string[] = [];
+
+      const report = await redriveStuckMedia({
+        repository,
+        clock: fixedClock(NOW),
+        dispatch: async (id) => {
+          if (id === 'bad') throw new Error('redis unreachable');
+          dispatched.push(id);
+        },
+      });
+
+      // The second asset is the point: a maintenance pass that abandons its
+      // batch on the first error leaves every later asset stuck forever.
+      expect(dispatched).toEqual(['good']);
+      expect(report.redriven).toBe(1);
+      expect(report.failures).toHaveLength(1);
+      expect(report.failures[0]).toContain('bad');
+      expect(report.failures[0]).toContain('redis unreachable');
+    });
+
+    it('does nothing when nothing is stuck', async () => {
+      const repository = new FakeMaintenance();
+      let called = 0;
+
+      const report = await redriveStuckMedia({
+        repository,
+        clock: fixedClock(NOW),
+        dispatch: async () => {
+          called += 1;
+        },
+      });
+
+      expect(called).toBe(0);
+      expect(report.redriven).toBe(0);
+    });
   });
 });

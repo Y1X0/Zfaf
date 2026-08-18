@@ -43,6 +43,7 @@ const nextConfig: NextConfig = {
     '@zfaf/infra',
     '@zfaf/invitation-renderer',
     '@zfaf/media-client',
+    '@zfaf/media-processing',
   ],
   /**
    * Files the tracer cannot see.
@@ -76,6 +77,11 @@ const nextConfig: NextConfig = {
     '@aws-sdk/s3-request-presigner',
     // A Rust binding; webpack cannot parse a `.node` binary.
     '@resvg/resvg-js',
+    // ADR-0023: reachable from the request path when `MEDIA_DISPATCH=inline`.
+    // Both are native — Sharp's libvips binding and libheif's emscripten
+    // build — and both must stay on the Node runtime.
+    'sharp',
+    'libheif-js',
   ],
   webpack(
     config: {
@@ -111,6 +117,12 @@ const nextConfig: NextConfig = {
     if (isServer) {
       config.externals ??= [];
       config.externals.push({ '@node-rs/argon2': 'commonjs @node-rs/argon2' });
+      // Sharp and libheif arrive the same way and need the same treatment:
+      // through `@zfaf/media-processing`, which is transpiled, so webpack
+      // follows the import instead of consulting `serverExternalPackages`
+      // and then meets a `.node` binary it cannot parse (ADR-0023).
+      config.externals.push({ sharp: 'commonjs sharp' });
+      config.externals.push({ 'libheif-js': 'commonjs libheif-js' });
     }
 
     return config;

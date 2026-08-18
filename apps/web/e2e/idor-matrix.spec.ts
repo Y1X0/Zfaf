@@ -146,6 +146,26 @@ const MATRIX: readonly RouteExpectation[] = [
     },
   },
 
+  // ── scheduled jobs (ADR-0023) ─────────────────────────────────────────────
+  //
+  // Not public and not a session surface: the caller is a cron trigger holding
+  // a shared secret, so *every* actor class below is a caller without one. The
+  // route answers 404 to all of them, including staff — an endpoint that
+  // sweeps storage and expires invitations must not widen to whoever happens
+  // to be signed in as an administrator.
+  {
+    route: 'internal/jobs/[job]',
+    method: 'POST',
+    path: () => '/api/internal/jobs/sweep-media',
+    expect: {
+      anonymous: 'denied',
+      stranger: 'denied',
+      owner: 'denied',
+      staffPending: 'denied',
+      staff: 'denied',
+    },
+  },
+
   // ── public surfaces ───────────────────────────────────────────────────────
   {
     route: 'public/analytics/event',

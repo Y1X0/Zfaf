@@ -5,7 +5,11 @@ import type { Clock } from '../../ports/clock.js';
 import type { MediaMaintenanceRepository, MediaRepository } from '../ports/media-repository.js';
 import type { StorageProvider } from '../ports/storage-provider.js';
 import { decideDeletion } from '../domain/media-deletion.js';
-import { PENDING_UPLOAD_EXPIRY_HOURS, SOFT_DELETE_GRACE_DAYS } from '../domain/media-status.js';
+import {
+  PENDING_UPLOAD_EXPIRY_HOURS,
+  SOFT_DELETE_GRACE_DAYS,
+  STUCK_PROCESSING_MINUTES,
+} from '../domain/media-status.js';
 
 /**
  * Deleting media, and cleaning up after it (D4.7, D4.8).
@@ -137,4 +141,63 @@ export async function sweepMedia(deps: SweepDeps): Promise<SweepReport> {
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+// ── the redrive (ADR-0023) ─────────────────────────────────────────────────
+
+export interface RedriveDeps {
+  readonly repository: MediaMaintenanceRepository;
+  readonly clock: Clock;
+  /**
+   * Hands one asset back to whichever media adapter is configured.
+   *
+   * A function rather than a queue, because this use case must work for both
+   * deployments: on `queue` it enqueues, on `inline` it encodes. Core does not
+   * know which, and must not.
+   */
+  readonly dispatch: (mediaId: string) => Promise<void>;
+  readonly batchSize?: number;
+}
+
+export interface RedriveReport {
+  readonly redriven: number;
+  /** Counted and reported, never thrown — one bad asset must not stop the rest. */
+  readonly failures: readonly string[];
+}
+
+/**
+ * Restarts uploads left in `processing` by a run that never finished.
+ *
+ * This exists because of ADR-0023 and would not otherwise be needed: BullMQ
+ * retried a failed job with backoff, so a dead worker cost minutes rather than
+ * a photograph. The `inline` adapter has no retry — the process that was
+ * encoding simply went away — so the guarantee has to be reconstructed here.
+ * Without this, `MEDIA_DISPATCH=inline` is a configuration that loses customer
+ * uploads silently, which is why the ADR treats the two as one change.
+ *
+ * It is safe on the `queue` deployment too, and worth running there: a job
+ * that exhausts its attempts also leaves the row exactly like this, and
+ * nothing else in the system was looking.
+ *
+ * Idempotent by construction. `processMediaJob` skips anything already `ready`
+ * or `quarantined`, so redriving an asset that finished between the query and
+ * the dispatch costs one no-op rather than a second set of derivatives.
+ */
+export async function redriveStuckMedia(deps: RedriveDeps): Promise<RedriveReport> {
+  const cutoff = new Date(deps.clock.now().getTime() - STUCK_PROCESSING_MINUTES * 60 * 1000);
+  const stuck = await deps.repository.findStuckProcessing(cutoff, deps.batchSize ?? DEFAULT_BATCH);
+
+  const failures: string[] = [];
+  let redriven = 0;
+
+  for (const asset of stuck) {
+    try {
+      await deps.dispatch(asset.id);
+      redriven += 1;
+    } catch (error) {
+      failures.push(`redrive ${asset.id}: ${describe(error)}`);
+    }
+  }
+
+  return { redriven, failures };
 }

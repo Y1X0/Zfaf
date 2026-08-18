@@ -69,6 +69,21 @@ export function isServable(status: MediaStatus, scanStatus: ScanStatus): boolean
  */
 export const PENDING_UPLOAD_EXPIRY_HOURS = 24;
 
+/**
+ * How long an asset may sit in `processing` before it is presumed abandoned.
+ *
+ * Fifteen minutes, and the number comes from what it has to survive rather
+ * than from taste: the slowest measured encode of a 12-megapixel photograph is
+ * about a second of CPU, which on the smallest instance we deploy to is on the
+ * order of ten seconds of wall clock. Anything still `processing` after
+ * fifteen minutes is not slow, it is orphaned — a worker that died, or an
+ * `inline` request whose process was replaced mid-encode (ADR-0023).
+ *
+ * Long enough that a redrive never races a run that is merely slow; short
+ * enough that a customer's photograph is not lost for an afternoon.
+ */
+export const STUCK_PROCESSING_MINUTES = 15;
+
 export function isStalePendingUpload(status: MediaStatus, createdAt: Date, now: Date): boolean {
   if (status !== 'pending') return false;
   const ageHours = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);

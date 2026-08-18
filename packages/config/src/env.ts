@@ -44,6 +44,36 @@ export const EnvSchema = z.object({
   STORAGE_SECRET_ACCESS_KEY: NonEmpty,
   STORAGE_PUBLIC_BASE_URL: z.string().url(),
 
+  /**
+   * Where an uploaded photograph gets encoded (ADR-0023).
+   *
+   * `queue` is the default and the original design: `complete` puts a job in
+   * BullMQ and `apps/worker` does the work, isolated from the request budget
+   * (docs/08 §6).
+   *
+   * `inline` does it in the request that completed the upload, and exists for
+   * one reason — no platform offers a free always-on worker, and this is what
+   * a zero-cost launch costs. It is a deliberate, reversible trade: changing
+   * this value back and redeploying restores the original topology exactly,
+   * because both paths are built and both are tested.
+   */
+  MEDIA_DISPATCH: z.enum(['queue', 'inline']).default('queue'),
+
+  /**
+   * Bearer token for the scheduled-jobs endpoint (ADR-0023).
+   *
+   * Optional in the schema and closed by default in the route: unset means
+   * every call is refused. That is the opposite of `HEALTH_CHECK_TOKEN`, which
+   * still answers without one, and deliberately so — a probe that is a little
+   * informative beats an unmonitored deployment, but an open endpoint that
+   * deletes storage objects beats nothing at all.
+   *
+   * Required in production when `MEDIA_DISPATCH=inline`, since the redrive is
+   * the only thing standing between a failed encode and a lost photograph.
+   * The cross-field rule below enforces that.
+   */
+  CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters').optional(),
+
   MAIL_DRIVER: z.enum(['smtp', 'resend', 'noop']).default('smtp'),
   MAIL_SMTP_URL: z.string().url().optional(),
   /** Required when the driver is `resend`; the cross-field rule below enforces it. */
@@ -154,6 +184,20 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     }
     if (env.STORAGE_DRIVER === 'minio') {
       productionIssues.push('STORAGE_DRIVER "minio" is a local development driver');
+    }
+    /**
+     * `inline` without a redrive loses photographs, quietly.
+     *
+     * The inline adapter has no retry: a process replaced mid-encode leaves an
+     * asset in `processing` and nothing comes back for it. The scheduled
+     * `redrive-media` job is what replaces BullMQ's backoff, and it cannot run
+     * without this secret — so the pairing is enforced here rather than left
+     * as a line in a runbook (ADR-0023 §4).
+     */
+    if (env.MEDIA_DISPATCH === 'inline' && !env.CRON_SECRET) {
+      productionIssues.push(
+        'CRON_SECRET is required when MEDIA_DISPATCH is "inline" — without the redrive job, a failed encode is a lost upload',
+      );
     }
     /**
      * `noop` mail in production is silent failure by configuration.

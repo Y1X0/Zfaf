@@ -1,8 +1,7 @@
-import { getEnv } from '@zfaf/config';
 import { completeUpload, tenantScopeFor } from '@zfaf/core';
 
 import { container } from '../../../../../../server/container.js';
-import { enqueueMediaProcessing } from '../../../../../../server/media-queue.js';
+import { dispatchMediaProcessing } from '../../../../../../server/media-dispatch.js';
 import { requireSameOrigin } from '../../../../../../server/origin.js';
 import { requireActor } from '../../../../../../server/request-context.js';
 import {
@@ -21,11 +20,12 @@ import {
  * large the file is or what type it is, because it can prove neither and every
  * answer it could give is one an attacker chooses.
  *
- * On success the asset moves to `processing` and a job is queued for
- * `apps/worker`, which decodes the bytes, identifies the real type, generates
- * the derivatives and writes them back to storage. The row is marked *before*
- * the job is queued — a worker that arrived first would find a `pending` row
- * and refuse its own work.
+ * On success the asset moves to `processing` and is handed to whichever media
+ * adapter this deployment configured (ADR-0023): a BullMQ job for
+ * `apps/worker`, or the encode itself right here. Either way the bytes are
+ * decoded, the real type identified, the derivatives generated and written
+ * back to storage. The row is marked *before* the hand-off — a worker that
+ * arrived first would find a `pending` row and refuse its own work.
  *
  * There is no body. The media id is in the path, the truth is in storage, and
  * anything else a client could send here would only be something to distrust.
@@ -62,7 +62,6 @@ export async function POST(
     ? await deps.invitations.findByIdInScope(media.invitationId, scope)
     : null;
 
-  const redisUrl = getEnv().REDIS_URL;
   const result = await completeUpload(
     {
       actor: session.actor,
@@ -72,7 +71,10 @@ export async function POST(
     {
       repository: deps.media,
       storage: deps.storage,
-      enqueue: (job) => enqueueMediaProcessing(redisUrl, job.mediaId),
+      // Which adapter runs is `MEDIA_DISPATCH`, not this route's business
+      // (ADR-0023). On an `inline` deployment this call *is* the encode, so
+      // the response below is sent after the work rather than before it.
+      enqueue: (job) => dispatchMediaProcessing(job.mediaId),
     },
   );
 

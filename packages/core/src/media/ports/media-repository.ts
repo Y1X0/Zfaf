@@ -125,6 +125,15 @@ export interface MediaMaintenanceRepository {
   /** Soft-deleted assets past the recovery window. */
   findPurgeableAssets(deletedBefore: Date, limit: number): Promise<readonly MediaAssetRecord[]>;
 
+  /**
+   * Assets left in `processing` by a run that never finished (ADR-0023).
+   *
+   * Filtered on `updatedAt` rather than `createdAt`: an asset that was
+   * redriven once and stalled again must become eligible again, and its
+   * creation time never moves.
+   */
+  findStuckProcessing(updatedBefore: Date, limit: number): Promise<readonly MediaAssetRecord[]>;
+
   /** Removes the row once its bytes are gone. */
   hardDelete(mediaId: string): Promise<void>;
 }
