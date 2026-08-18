@@ -130,7 +130,7 @@ container_env=(
 # ── Optional resource ceiling ──────────────────────────────────────────────
 #
 # Empty by default, so an ordinary run is exactly the run it always was — no
-# limit, nothing weakened, the same fourteen checks.
+# limit, nothing weakened, the same sixteen checks.
 #
 # Set, it applies a resource ceiling to both containers, and the whole suite
 # becomes a different question: does this product actually *fit* the instance
@@ -293,6 +293,41 @@ if [ "$(docker inspect -f '{{.State.ExitCode}}' "$WORKER_NAME" 2>/dev/null)" = "
   pass "shuts down gracefully on SIGTERM"
 else
   fail "did not shut down gracefully on SIGTERM"
+fi
+
+# ── The zero-cost deployment's extra requirement (ADR-0023) ────────────────
+#
+# `MEDIA_DISPATCH=inline` makes the web image encode photographs itself, which
+# means the web image has to *contain* the encoder. That is not free: the
+# standalone tree is pruned by Next's tracer, and the first build after the
+# processor moved into a package shipped **Next's own sharp and no libheif at
+# all** — an image that boots, serves, and then cannot process a single upload.
+#
+# Run from `/app/apps/web` because that is where the server's own bundle
+# resolves from; checking with a different working directory would prove
+# something about the runner rather than about the image.
+echo
+echo "The web image, for an inline deployment"
+
+if docker run --rm -w /app/apps/web "$WEB_IMAGE" node -e "
+  const sharp = require('sharp');
+  sharp({ create: { width: 32, height: 32, channels: 3, background: '#ffffff' } })
+    .webp().toBuffer().then((b) => { if (!b.length) process.exit(1); });
+" >/dev/null 2>&1; then
+  pass "carries an image encoder that actually encodes"
+else
+  fail "cannot encode an image — MEDIA_DISPATCH=inline would boot and process nothing"
+fi
+
+# Separately, because it fails separately: libheif is a different package with
+# a different reason to go missing, and an iPhone photograph is the single most
+# likely thing a customer uploads (ADR-0019).
+if docker run --rm -w /app/apps/web "$WEB_IMAGE" node -e "
+  require('libheif-js');
+" >/dev/null 2>&1; then
+  pass "carries the HEIC decoder, so an iPhone photograph is readable"
+else
+  fail "cannot load libheif-js — every HEIC upload would be rejected"
 fi
 
 # ── The ceiling, if one was asked for ──────────────────────────────────────

@@ -98,7 +98,7 @@ jobs:
           git status --porcelain infra/docker/ || true
 
       # The command, unmodified. No substitute base image, no skipped layer,
-      # no relaxed assertion. Twelve checks and an exit code.
+      # no relaxed assertion. Sixteen checks and an exit code.
       - name: pnpm docker:smoke
         run: pnpm docker:smoke
 

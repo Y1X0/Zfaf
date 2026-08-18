@@ -6,7 +6,7 @@
 # read a specification: it is to run the product inside the same ceiling and
 # see what happens.
 #
-# So this is the pre-Render gate's own command, unmodified — the same fourteen
+# So this is the pre-Render gate's own command, unmodified — the same sixteen
 # checks, the same images, no relaxed assertion — with one addition: both
 # containers are capped at a free instance's memory. A pass means the images
 # boot, serve, encode and shut down inside that. A failure is a real answer
