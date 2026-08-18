@@ -1,0 +1,55 @@
+# Applies `render.yaml` to Render (docs/22 §4).
+#
+# It runs here rather than in the development sandbox for the same reason the
+# pre-Render gate does: that sandbox's egress refuses `api.render.com` with a
+# 403, so the provisioner cannot reach the provider at all. Nothing about the
+# blueprint was changed to work around that — the same script runs unmodified
+# on a runner with ordinary network access.
+#
+# **Triggered by hand, and `preflight` by default.** This creates paid
+# resources. A workflow that provisions itself on push is a bill nobody
+# authorised, and docs/14 §4 puts a human in front of production on purpose.
+#
+# It never prints a secret: not a connection string, not an environment value,
+# not the API key. Every line names a resource and its status.
+name: Render provision
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preflight lists what would happen and creates nothing. provision creates what is missing.'
+        required: true
+        default: preflight
+        type: choice
+        options: [preflight, provision]
+
+concurrency:
+  group: render-provision
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply the blueprint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Recorded before anything is created, so the verdict stays auditable:
+      # which commit, and the hash of the blueprint that was applied.
+      - name: Record what is being applied
+        run: |
+          git rev-parse HEAD
+          sha256sum render.yaml
+          git status --porcelain render.yaml || true
+
+      - name: Apply
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: node scripts/render-provision.mjs --mode "${{ inputs.mode }}"

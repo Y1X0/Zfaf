@@ -1,0 +1,83 @@
+# Interrogates a running deployment (docs/22 §6, §9).
+#
+# Runs on a GitHub runner rather than in the development sandbox because that
+# sandbox's egress refuses `*.onrender.com`, so nothing there can reach the
+# thing under test. The scripts are the committed ones, unmodified.
+#
+# Two suites, and the split is the safety posture:
+#
+#   • `verify-deployment.sh` — reads only. Every request is a GET or a HEAD
+#     against something a visitor could ask for anyway. Safe against any
+#     deployment, including production.
+#
+#   • `locale-routing.spec.ts` — the D9.1 question no local harness can answer.
+#     Next builds request URLs from the hostname it was bound to and compares
+#     rewrites against it; a platform's proxy is not this repository's TLS
+#     terminator, so the only honest test is behind the real one. It seeds
+#     nothing and writes nothing, which is why it is the one Playwright suite
+#     that may point at a deployment (playwright.config.ts).
+#
+# Anything that writes — sign-in, publishing, RSVP — is deliberately absent.
+# Those belong on a staging database, by a person who knows it is staging.
+name: Render verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Base URL of the deployment, e.g. https://zfaf-web-xxxx.onrender.com'
+        required: true
+        type: string
+      slug:
+        description: 'Optional published invitation slug to check, with its preview card.'
+        required: false
+        type: string
+
+concurrency:
+  group: render-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify the deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Record what is being verified
+        run: |
+          git rev-parse HEAD
+          echo "target: ${{ inputs.url }}"
+
+      # Read-only. Health, locale routing, security headers, the public page.
+      - name: Deployment checks
+        env:
+          SLUG: ${{ inputs.slug }}
+          # Absent unless configured; the script then skips the deep probe's
+          # authenticated half and says so rather than passing quietly.
+          HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
+        run: bash scripts/verify-deployment.sh "${{ inputs.url }}"
+
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @zfaf/web exec playwright install --with-deps chromium
+
+      # D9.1 behind the platform's own proxy. `E2E_BASE_URL` makes the suite
+      # start no server of its own and validate the certificate in full.
+      - name: Locale routing (D9.1) against the deployment
+        env:
+          E2E_BASE_URL: ${{ inputs.url }}
+        run: pnpm --filter @zfaf/web exec playwright test e2e/locale-routing.spec.ts --project=mobile-390

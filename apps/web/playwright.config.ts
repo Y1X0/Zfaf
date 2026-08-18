@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -15,8 +17,22 @@ import { defineConfig, devices } from '@playwright/test';
  * download this environment will not do.
  */
 
-/** The image's Chromium. Overridable for a machine that manages its own. */
-const executablePath = process.env['CHROMIUM_PATH'] ?? '/opt/pw-browsers/chromium';
+/**
+ * Chromium, when we have to name it — and Playwright's own, when we do not.
+ *
+ * The development image ships a browser at a fixed path and forbids the
+ * download that would otherwise fetch one, so the path has to be given. A
+ * GitHub runner is the opposite case: `playwright install chromium` puts a
+ * matched build under `~/.cache/ms-playwright`, and naming a path that does
+ * not exist there fails every test at launch with an error about a missing
+ * executable rather than anything to do with the product.
+ *
+ * So the path is used **only if something is actually there**. `CHROMIUM_PATH`
+ * still overrides for a machine that manages its own; absent both, the option
+ * is omitted entirely and Playwright resolves the browser it installed.
+ */
+const pinnedChromium = process.env['CHROMIUM_PATH'] ?? '/opt/pw-browsers/chromium';
+const launchOptions = existsSync(pinnedChromium) ? { executablePath: pinnedChromium } : {};
 
 const PORT = Number(process.env['E2E_PORT'] ?? 3100);
 
@@ -76,7 +92,7 @@ export default defineConfig({
         viewport: { width: 390, height: 844 },
         isMobile: false,
         hasTouch: true,
-        launchOptions: { executablePath },
+        launchOptions,
       },
       testIgnore: /desktop\.spec\.ts/,
     },
@@ -85,7 +101,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
-        launchOptions: { executablePath },
+        launchOptions,
       },
       testMatch: /desktop\.spec\.ts/,
     },
