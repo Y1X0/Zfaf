@@ -48,7 +48,7 @@ services:
     name: zfaf-web
     runtime: docker
     repo: https://github.com/y1x0/zfaf
-    branch: main
+    branch: claude/wedding-invitation-saas-ecfcdg
     # Frankfurt is the closest Render region to the Gulf market, and it is a
     # placeholder until the owner and legal counsel settle Saudi data
     # residency under the PDPL. That is not an engineering decision and this
@@ -62,8 +62,8 @@ services:
     # §11) — exactly the failure the split exists to prevent.
     healthCheckPath: /api/health
     # Deliberately off. docs/14 §4 puts a human gate in front of production:
-    # migrations, then worker, then web, each verified. A push to `main` that
-    # deploys itself removes the gate the process depends on.
+    # migrations, then worker, then web, each verified. A push to the deploy
+    # branch that deploys itself removes the gate the process depends on.
     autoDeploy: false
     numInstances: 1
     envVars:
@@ -89,7 +89,7 @@ services:
     name: zfaf-worker
     runtime: docker
     repo: https://github.com/y1x0/zfaf
-    branch: main
+    branch: claude/wedding-invitation-saas-ecfcdg
     region: frankfurt
     plan: standard
     dockerfilePath: ./infra/docker/worker.Dockerfile

@@ -30,6 +30,7 @@
  * `check-alerts.mjs` gives next door: the file's shape is fixed and known, and
  * a deployment check that itself needs a supply-chain review is a poor trade.
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -165,6 +166,67 @@ const databases = Array.isArray(blueprint.databases) ? blueprint.databases : [];
 
 if (services.length === 0) problems.push('render.yaml declares no services.');
 if (databases.length === 0) problems.push('render.yaml declares no database.');
+
+/**
+ * The branch each service deploys from must actually exist.
+ *
+ * This blueprint said `branch: main` for both services while the repository
+ * had **no `main` at all** — one branch, and a different name. Render would
+ * have been pointed at a ref that does not resolve, and the failure arrives at
+ * provisioning time, in a dashboard, with a Postgres instance already created
+ * and billing.
+ *
+ * Nothing else catches it. The YAML is valid, the schema check passes, the
+ * gate builds the images from the working tree rather than from the branch —
+ * every existing check is blind to a branch name being wrong, because none of
+ * them ever resolves it.
+ *
+ * Local refs first, then the remote-tracking ones: a fresh CI checkout has the
+ * branch it checked out, and a developer's clone usually has both.
+ */
+function branchExists(branch) {
+  for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
+    try {
+      execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], {
+        cwd: root,
+        stdio: 'ignore',
+      });
+      return true;
+    } catch {
+      // Not this ref. Try the next, then report.
+    }
+  }
+  return false;
+}
+
+let gitAvailable = true;
+try {
+  execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' });
+} catch {
+  gitAvailable = false;
+}
+
+for (const service of services) {
+  // Only the services built from the repository. A key-value store has no
+  // branch and declaring one would be the error.
+  if (!service.repo) continue;
+
+  if (!service.branch) {
+    problems.push(`${service.name}: declares a repo but no branch to deploy from.`);
+    continue;
+  }
+  if (!gitAvailable) {
+    warnings.push(
+      `${service.name}: branch "${service.branch}" was not verified — this is not a git checkout, so no ref could be resolved.`,
+    );
+    continue;
+  }
+  if (!branchExists(service.branch)) {
+    problems.push(
+      `${service.name}: branch "${service.branch}" does not exist in this repository. Render would be pointed at a ref that does not resolve.`,
+    );
+  }
+}
 
 const groupsByName = new Map(groups.map((group) => [group.name, group]));
 
