@@ -114,6 +114,28 @@ describe('parseEnv', () => {
     ).toThrow(/noop/);
   });
 
+  it('accepts the noop driver in production only when the pilot flag is explicit', () => {
+    /**
+     * ADR-0024. The guard above is not removed, it is given one deliberate
+     * exit — named after what it costs rather than what it enables — so that
+     * running with no email at all is a decision somebody typed rather than a
+     * default somebody inherited.
+     */
+    const pilot = {
+      ...valid,
+      NODE_ENV: 'production',
+      PUBLIC_BASE_URL: 'https://zfaf.app',
+      STORAGE_DRIVER: 's3',
+      MAIL_DRIVER: 'noop',
+    };
+
+    expect(() => parseEnv(pilot)).toThrow(/noop/);
+    expect(() => parseEnv({ ...pilot, PILOT_NO_EMAIL: 'true' })).not.toThrow();
+    // Anything short of the exact word is not consent.
+    expect(() => parseEnv({ ...pilot, PILOT_NO_EMAIL: '1' })).toThrow(/noop/);
+    expect(() => parseEnv({ ...pilot, PILOT_NO_EMAIL: 'yes' })).toThrow(/noop/);
+  });
+
   it('refuses the smtp driver in production, because no SMTP adapter exists', () => {
     /**
      * The same silent loss as `noop`, under a name that reads like a working

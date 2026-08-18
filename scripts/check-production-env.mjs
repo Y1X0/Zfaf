@@ -390,9 +390,12 @@ function checkBlueprint(name) {
     }
   }
 
-  if (configured.get('MAIL_DRIVER') === 'noop') {
+  // `noop` is refused unless the blueprint also says, in the same file, that
+  // sending nothing is the intention (ADR-0024). Reading one without the other
+  // is how a pilot's setting survives into a deployment with customers.
+  if (configured.get('MAIL_DRIVER') === 'noop' && configured.get('PILOT_NO_EMAIL') !== 'true') {
     problems.push(
-      `${name}: MAIL_DRIVER is "noop" — verification and reset links would be silently discarded.`,
+      `${name}: MAIL_DRIVER is "noop" — verification and reset links would be silently discarded. Declare PILOT_NO_EMAIL=true in the same blueprint to accept that deliberately.`,
     );
   }
   if (configured.get('STORAGE_DRIVER') === 'minio') {

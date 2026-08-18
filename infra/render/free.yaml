@@ -110,8 +110,25 @@ envVarGroups:
         value: zfaf-media
       - key: STORAGE_PUBLIC_BASE_URL
         value: https://cdn.zfaf.app
+      # No email in the pilot (ADR-0024). There is no domain to verify and no
+      # provider account, and the honest alternative to a real one is not a
+      # placeholder key — a fake key boots and then fails every send, which is
+      # the silent loss the guard was written to prevent.
+      #
+      # `PILOT_NO_EMAIL` is what makes `noop` permissible in production, and it
+      # is declared here rather than typed into a dashboard so that a reviewer
+      # reading this file sees the cost: no verification link, no password
+      # reset, no reply notification. Accounts stay `unverified` — able to sign
+      # in and edit, unable to publish — until a token is redeemed by hand.
+      #
+      # Reverting is these two lines: `resend`, drop the flag, add the key.
       - key: MAIL_DRIVER
-        value: resend
+        value: noop
+      - key: PILOT_NO_EMAIL
+        value: 'true'
+      # Kept even though nothing sends: the address is what the templates
+      # render as the sender, and a deployment that later switches back to
+      # `resend` should not also have to remember this.
       - key: MAIL_FROM_ADDRESS
         value: no-reply@zfaf.app
       - key: MAIL_FROM_NAME
@@ -135,8 +152,6 @@ envVarGroups:
       - key: STORAGE_ACCESS_KEY_ID
         sync: false
       - key: STORAGE_SECRET_ACCESS_KEY
-        sync: false
-      - key: MAIL_RESEND_API_KEY
         sync: false
       - key: CDN_ZONE_ID
         sync: false

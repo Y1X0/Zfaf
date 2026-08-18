@@ -47,6 +47,27 @@ describe('registration', () => {
     expect(message?.data['token']).toBeTruthy();
   });
 
+  it('still creates the account when the mail transport fails', async () => {
+    /**
+     * ADR-0024. The row and the token are written before the send, so an
+     * unhandled throw here returns 500 to somebody who *does* have an account
+     * and cannot tell — and whose retry is answered "that address is taken".
+     * A provider outage is not the customer's fault.
+     */
+    harness.mail.send = async () => {
+      throw new Error('provider returned 401');
+    };
+
+    const result = await registerUser(registration, harness.deps);
+
+    expect(result.ok).toBe(true);
+    const user = await harness.deps.users.findByEmail('sarah@example.com');
+    expect(user).not.toBeNull();
+    // Unverified, which is the honest state: nobody proved the address. It
+    // gates publishing, not signing in, so the account is still usable.
+    expect(user?.emailVerifiedAt).toBeNull();
+  });
+
   it('never stores the password in a recoverable form', async () => {
     await registerUser(registration, harness.deps);
     const user = await harness.deps.users.findByEmail('sarah@example.com');

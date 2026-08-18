@@ -74,6 +74,26 @@ export const EnvSchema = z.object({
    */
   CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters').optional(),
 
+  /**
+   * Runs the pilot with no email at all (ADR-0024).
+   *
+   * It exists to disable a guard, so it is named after what it costs rather
+   * than after what it enables. With it set, `MAIL_DRIVER=noop` is permitted in
+   * production and **nothing is ever sent**: no verification link, no password
+   * reset, no notice that a guest replied. An account stays `unverified`, which
+   * means it can sign in and edit but cannot publish, until somebody redeems
+   * its token by hand.
+   *
+   * That is a defensible shape for a pilot whose only accounts belong to the
+   * owner, and an indefensible one for a product with customers. The rule below
+   * still refuses `noop` without it, which is the whole point: the failure this
+   * guards against is silent, and silence is what makes it expensive.
+   */
+  PILOT_NO_EMAIL: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+
   MAIL_DRIVER: z.enum(['smtp', 'resend', 'noop']).default('smtp'),
   MAIL_SMTP_URL: z.string().url().optional(),
   /** Required when the driver is `resend`; the cross-field rule below enforces it. */
@@ -206,9 +226,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
      * for a verification link that was never sent. Refusing to boot is the
      * only behaviour that surfaces it before a customer does.
      */
-    if (env.MAIL_DRIVER === 'noop') {
+    if (env.MAIL_DRIVER === 'noop' && !env.PILOT_NO_EMAIL) {
       productionIssues.push(
-        'MAIL_DRIVER "noop" sends nothing — verification and reset links would never arrive',
+        'MAIL_DRIVER "noop" sends nothing — verification and reset links would never arrive. Set PILOT_NO_EMAIL=true to accept that deliberately (ADR-0024)',
       );
     }
     /**

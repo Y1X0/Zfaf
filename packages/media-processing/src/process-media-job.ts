@@ -131,6 +131,38 @@ export async function processMediaJob(
     throw new TransientJobError(`variant upload failed: ${describe(error)}`);
   }
 
+  /**
+   * The original goes now — **before** the row becomes `ready` (ADR-0024).
+   *
+   * Order is the whole safety property here, not a detail. `variantKey` places
+   * every derivative in the original's own directory, so a published
+   * invitation hands each guest a URL one path segment away from
+   * `original.bin` — and the original is the file that still carries what the
+   * camera wrote, which on most phones includes the coordinates of the
+   * couple's home. Serving derivatives from a public bucket while the original
+   * sits beside them publishes that to anyone who opens the invitation.
+   *
+   * So a failure to delete must not produce a `ready` asset. It throws, the row
+   * stays `processing`, and the retry — BullMQ's on the queue path, the
+   * scheduled redrive on the inline one — runs the whole job again. Every step
+   * before this is idempotent: the same variants are written to the same keys.
+   *
+   * The narrow window this opens is stated rather than engineered around: if
+   * the delete succeeds and `completeProcessing` below then fails, the asset is
+   * left `processing` with no original to re-read, and a later attempt cannot
+   * finish it. That is one Prisma write wide, it fails closed rather than open,
+   * and ADR-0024 records it.
+   *
+   * Quarantine takes the other branch above and keeps its original on purpose:
+   * a file held as evidence is not a file we serve.
+   */
+  try {
+    await deps.storage.delete(media.storageKey);
+  } catch (error) {
+    await deps.repository.markFailed(media.id, `original delete: ${describe(error)}`);
+    throw new TransientJobError(`could not delete the original: ${describe(error)}`);
+  }
+
   await deps.repository.completeProcessing({
     mediaId: media.id,
     // The sniffed type replaces whatever the client claimed. From here on the

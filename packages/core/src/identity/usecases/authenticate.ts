@@ -145,12 +145,35 @@ export async function registerUser(
     now,
   });
 
-  await deps.mail.send({
-    to: user.email,
-    template: 'email_verification',
-    locale: user.locale,
-    data: { token: verificationToken, name: user.name ?? '' },
-  });
+  /**
+   * A transport failure must not cost the customer their account (ADR-0024).
+   *
+   * The row and the token are already written by the time we get here, so an
+   * unhandled throw returns 500 to somebody who *does* now have an account —
+   * they simply cannot tell, and retrying gives them "that address is taken".
+   * A provider outage, a rate limit, an expired key: none of those is the
+   * customer's fault and none of them is worth a half-created account.
+   *
+   * Swallowed, not ignored. The token is in the database and
+   * `resendVerification` re-sends against it, so the recoverable state is
+   * intact. The mail adapter has already logged the failure with its status
+   * (`ResendMailService`), which is the line an operator needs.
+   *
+   * The consequence is bounded by design: verification gates publishing rather
+   * than the first run, so an account whose link never arrived can still sign
+   * in and build — it just cannot publish until the address is confirmed.
+   */
+  try {
+    await deps.mail.send({
+      to: user.email,
+      template: 'email_verification',
+      locale: user.locale,
+      data: { token: verificationToken, name: user.name ?? '' },
+    });
+  } catch {
+    // Deliberately empty: the adapter logged it, and the audit entry below
+    // records the registration either way.
+  }
 
   // Signed in immediately. Verification gates publishing, not the first run, so
   // a new user reaches a finished draft before being asked for anything.

@@ -136,6 +136,65 @@ describe('the happy path', () => {
     expect(repository.completed?.['blurhash']).toBeTruthy();
   });
 
+  /**
+   * The originals (ADR-0024).
+   *
+   * `variantKey` puts every derivative in the original's own directory, so a
+   * guest holding a published derivative URL is one path segment away from
+   * `original.bin` — the file that still carries the camera's EXIF, home
+   * coordinates included. On a public bucket that is not a theoretical leak,
+   * it is the published document handing out the key. These are the tests that
+   * keep the original from being there to find.
+   */
+  it('deletes the original once the derivatives are written', async () => {
+    const outcome = await processMediaJob(
+      { mediaId: MEDIA_ID },
+      { repository, storage, processor: new SharpImageProcessor(), scanner: NO_OP_SCANNER },
+    );
+
+    expect(outcome.result).toBe('ready');
+    expect(storage.keys()).not.toContain(KEY);
+    // The derivatives are the point of the exercise and must survive it.
+    expect(storage.keys().length).toBe(outcome.variantsWritten);
+  });
+
+  it('refuses to mark an asset ready when the original could not be deleted', async () => {
+    // The ordering *is* the safety property. A `ready` row whose original is
+    // still in the bucket is exactly the leak, and it would be invisible —
+    // the product would look perfect.
+    storage.delete = async () => {
+      throw new Error('storage refused the delete');
+    };
+
+    await expect(
+      processMediaJob(
+        { mediaId: MEDIA_ID },
+        { repository, storage, processor: new SharpImageProcessor(), scanner: NO_OP_SCANNER },
+      ),
+    ).rejects.toThrow(TransientJobError);
+
+    expect(repository.calls).not.toContain('completeProcessing');
+    expect(repository.completed).toBeNull();
+    // Left retryable rather than terminal: every step before the delete writes
+    // the same variants to the same keys, so running the job again is safe.
+    expect(repository.failureReason).toContain('original delete');
+  });
+
+  it('skips an asset that is already ready, and does not need the original', async () => {
+    // What the redrive meets when it arrives after a run that finished. The
+    // original is gone by design, and a second pass must not go looking for it.
+    repository.row = record({ status: 'ready' });
+    await storage.delete(KEY);
+
+    const outcome = await processMediaJob(
+      { mediaId: MEDIA_ID },
+      { repository, storage, processor: new SharpImageProcessor(), scanner: NO_OP_SCANNER },
+    );
+
+    expect(outcome.result).toBe('skipped');
+    expect(repository.calls).toEqual([]);
+  });
+
   it('records the scan as skipped rather than clean when nothing scanned it', async () => {
     // Claiming a file was scanned when nothing scanned it is the kind of
     // untruth that gets believed during an incident.
@@ -147,11 +206,18 @@ describe('the happy path', () => {
   });
 
   it('records the size storage reported, not the row’s declared size', async () => {
+    // Read before the job runs, because the job deletes the original on the
+    // way out (ADR-0024). The assertion is unchanged and so is its point: the
+    // recorded size is the one the bytes actually had, never the client's
+    // claim of 1000.
+    const actual = (await storage.getObject(KEY))?.byteLength;
+    expect(actual).toBeGreaterThan(0);
+
     await processMediaJob(
       { mediaId: MEDIA_ID },
       { repository, storage, processor: new SharpImageProcessor(), scanner: NO_OP_SCANNER },
     );
-    const actual = (await storage.getObject(KEY))?.byteLength;
+
     expect(repository.completed?.['sizeBytes']).toBe(actual);
     expect(repository.completed?.['sizeBytes']).not.toBe(1000);
   });
