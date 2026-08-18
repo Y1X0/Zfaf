@@ -127,8 +127,31 @@ container_env=(
   -e "DEFAULT_MARKET=SA"
 )
 
+# ── Optional resource ceiling ──────────────────────────────────────────────
+#
+# Empty by default, so an ordinary run is exactly the run it always was — no
+# limit, nothing weakened, the same fourteen checks.
+#
+# Set, it applies a resource ceiling to both containers, and the whole suite
+# becomes a different question: does this product actually *fit* the instance
+# it is about to be deployed onto? A free Render instance is 512 MB and a tenth
+# of a CPU, and «it built» says nothing about whether Next.js boots or Sharp
+# encodes a photograph inside that. The answer is worth having before choosing
+# a plan rather than after the first customer.
+#
+#   SMOKE_CONTAINER_LIMITS='--memory=512m --memory-swap=512m' pnpm docker:smoke
+#
+# A run under a ceiling that fails is a real result about the plan, not a
+# broken harness — which is why the limits are opt-in and named in the output
+# rather than silently applied.
+read -r -a container_limits <<< "${SMOKE_CONTAINER_LIMITS:-}"
+if [ ${#container_limits[@]} -gt 0 ]; then
+  echo
+  echo "Resource ceiling: ${container_limits[*]}"
+fi
+
 docker rm -f "$WEB_NAME" "$WORKER_NAME" >/dev/null 2>&1 || true
-docker run -d --name "$WEB_NAME" --network=host -e "PORT=$WEB_PORT" "${container_env[@]}" "$WEB_IMAGE" >/dev/null
+docker run -d --name "$WEB_NAME" --network=host "${container_limits[@]}" -e "PORT=$WEB_PORT" "${container_env[@]}" "$WEB_IMAGE" >/dev/null
 
 echo
 echo "The web image"
@@ -202,7 +225,7 @@ fi
 # ── The worker ─────────────────────────────────────────────────────────────
 echo
 echo "The worker image"
-docker run -d --name "$WORKER_NAME" --network=host "${container_env[@]}" "$WORKER_IMAGE" >/dev/null
+docker run -d --name "$WORKER_NAME" --network=host "${container_limits[@]}" "${container_env[@]}" "$WORKER_IMAGE" >/dev/null
 sleep 12
 
 worker_log="$(docker logs "$WORKER_NAME" 2>&1 || true)"

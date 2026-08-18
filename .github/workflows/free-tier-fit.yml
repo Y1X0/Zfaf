@@ -1,0 +1,117 @@
+# Does the product actually fit a free instance? (docs/24)
+#
+# The plan decision in `render.yaml` — `standard` for both services — was made
+# on architecture, before anyone asked what the cheapest launch would cost. The
+# honest way to answer «could this run on a free instance instead» is not to
+# read a specification: it is to run the product inside the same ceiling and
+# see what happens.
+#
+# So this is the pre-Render gate's own command, unmodified — the same fourteen
+# checks, the same images, no relaxed assertion — with one addition: both
+# containers are capped at a free instance's memory. A pass means the images
+# boot, serve, encode and shut down inside that. A failure is a real answer
+# about the plan, not a broken harness, and it must not be «fixed» by raising
+# the ceiling.
+#
+# It creates nothing on any provider and costs nothing to run.
+name: Free-tier fit
+
+on:
+  workflow_dispatch:
+    inputs:
+      limits:
+        description: 'Docker resource flags applied to both containers. Render free is 512 MB / 0.1 CPU.'
+        required: true
+        default: '--memory=512m --memory-swap=512m'
+        type: string
+
+concurrency:
+  group: free-tier-fit
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  fit:
+    name: Run the gate inside a free instance's ceiling
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zfaf
+          POSTGRES_PASSWORD: zfaf_ci
+          POSTGRES_DB: zfaf
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U zfaf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://zfaf:zfaf_ci@127.0.0.1:5432/zfaf?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @zfaf/db db:generate
+
+      - name: Apply migrations
+        run: pnpm --filter @zfaf/db db:deploy
+
+      - name: Record what is being built and under what ceiling
+        run: |
+          git rev-parse HEAD
+          sha256sum infra/docker/web.Dockerfile infra/docker/worker.Dockerfile
+          echo "ceiling: ${{ inputs.limits }}"
+
+      - name: pnpm docker:smoke, under the ceiling
+        env:
+          SMOKE_CONTAINER_LIMITS: ${{ inputs.limits }}
+        run: pnpm docker:smoke
+
+      # Whether a container was killed by the kernel's OOM reaper is the single
+      # most useful fact this run can produce, and it is not in the smoke's own
+      # output — a container that dies mid-boot only looks like a failed check.
+      - name: Was anything OOM-killed?
+        if: always()
+        run: |
+          for name in zfaf-web-smoke zfaf-worker-smoke; do
+            state="$(docker inspect -f '{{.State.OOMKilled}} {{.State.ExitCode}}' "$name" 2>/dev/null || echo 'gone')"
+            echo "$name → OOMKilled/exit: $state"
+          done
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          echo '── web ──'
+          docker logs zfaf-web-smoke 2>&1 | tail -60 || true
+          echo '── worker ──'
+          docker logs zfaf-worker-smoke 2>&1 | tail -60 || true
