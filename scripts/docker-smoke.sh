@@ -295,6 +295,34 @@ else
   fail "did not shut down gracefully on SIGTERM"
 fi
 
+# ── The ceiling, if one was asked for ──────────────────────────────────────
+#
+# Reported from inside the script because the containers do not outlive it —
+# the cleanup trap removes them, so anything asking `docker inspect` afterwards
+# gets nothing and says so in a way that reads like an answer.
+#
+# Two facts, and both matter. The limit Docker actually applied, because a
+# ceiling that silently failed to attach would turn this whole run into a
+# passing test of nothing. And `OOMKilled`, because a container the kernel
+# reaped mid-run otherwise just looks like a failed check further up.
+if [ ${#container_limits[@]} -gt 0 ]; then
+  echo
+  echo "Under the ceiling"
+  for name in "$WEB_NAME" "$WORKER_NAME"; do
+    applied="$(docker inspect -f '{{.HostConfig.Memory}}' "$name" 2>/dev/null || echo '')"
+    oom="$(docker inspect -f '{{.State.OOMKilled}}' "$name" 2>/dev/null || echo '')"
+    if [ -z "$applied" ]; then
+      fail "$name: gone before it could be inspected"
+    elif [ "$applied" = "0" ]; then
+      fail "$name: no memory limit was applied — the ceiling did not attach"
+    elif [ "$oom" = "true" ]; then
+      fail "$name: OOM-killed at $((applied / 1024 / 1024)) MiB"
+    else
+      pass "$name: survived $((applied / 1024 / 1024)) MiB, not OOM-killed"
+    fi
+  done
+fi
+
 # ── Verdict ────────────────────────────────────────────────────────────────
 echo
 if [ "$failures" -gt 0 ]; then

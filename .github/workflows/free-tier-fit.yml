@@ -97,17 +97,6 @@ jobs:
           SMOKE_CONTAINER_LIMITS: ${{ inputs.limits }}
         run: pnpm docker:smoke
 
-      # Whether a container was killed by the kernel's OOM reaper is the single
-      # most useful fact this run can produce, and it is not in the smoke's own
-      # output — a container that dies mid-boot only looks like a failed check.
-      - name: Was anything OOM-killed?
-        if: always()
-        run: |
-          for name in zfaf-web-smoke zfaf-worker-smoke; do
-            state="$(docker inspect -f '{{.State.OOMKilled}} {{.State.ExitCode}}' "$name" 2>/dev/null || echo 'gone')"
-            echo "$name → OOMKilled/exit: $state"
-          done
-
       - name: Container logs on failure
         if: failure()
         run: |
