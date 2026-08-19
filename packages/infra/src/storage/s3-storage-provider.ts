@@ -41,7 +41,7 @@ export interface S3StorageConfig {
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
   /**
-   * MinIO addresses buckets by path; R2 and S3 by virtual host.
+   * MinIO and Backblaze B2 address buckets by path; R2 and S3 by virtual host.
    *
    * Getting this wrong produces signatures that verify locally and fail in
    * production, which is exactly the class of bug running the same contract

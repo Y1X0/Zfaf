@@ -36,7 +36,7 @@ export const EnvSchema = z.object({
    */
   TOTP_ENCRYPTION_KEY: z.string().min(32, 'TOTP_ENCRYPTION_KEY must be at least 32 characters'),
 
-  STORAGE_DRIVER: z.enum(['minio', 'r2', 's3']).default('minio'),
+  STORAGE_DRIVER: z.enum(['minio', 'r2', 's3', 'b2']).default('minio'),
   STORAGE_ENDPOINT: z.string().url(),
   STORAGE_REGION: NonEmpty.default('auto'),
   STORAGE_BUCKET_MEDIA: NonEmpty,
