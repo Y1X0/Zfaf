@@ -1,7 +1,8 @@
 'use client';
 
+import type { ReactElement } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ReactElement, useState } from 'react';
 
 interface DeleteInvitationButtonProps {
   readonly invitationId: string;
