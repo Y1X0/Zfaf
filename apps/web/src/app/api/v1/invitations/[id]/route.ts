@@ -1,7 +1,8 @@
-import { tenantScopeFor } from '@zfaf/core';
+import { deleteInvitation, tenantScopeFor } from '@zfaf/core';
 
 import { container } from '../../../../../server/container.js';
 import { requireActor } from '../../../../../server/request-context.js';
+import { requireSameOrigin } from '../../../../../server/origin.js';
 import { notFound, ok, unauthorized } from '../../../../../server/responses.js';
 
 /**
@@ -42,4 +43,42 @@ export async function GET(
     publishedAt: invitation.publishedAt?.toISOString() ?? null,
     hasPublishedVersion: invitation.publishedVersionId !== null,
   });
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
+  const session = await requireActor();
+  if (!session.authenticated) return unauthorized();
+
+  const scope = tenantScopeFor(session.actor);
+  if (!scope) return unauthorized();
+
+  const { id } = await context.params;
+  const deps = container();
+
+  const invitation = await deps.invitations.findByIdInScope(id, scope);
+  if (!invitation) return notFound('Invitation');
+
+  const result = await deleteInvitation(
+    {
+      actor: session.actor,
+      invitationId: id,
+      invitationOwnerId: invitation.ownerId,
+    },
+    {
+      repository: deps.invitations,
+      clock: deps.clock,
+    },
+  );
+
+  if (!result.ok) {
+    return notFound('Invitation');
+  }
+
+  return ok({ invitationId: id });
 }

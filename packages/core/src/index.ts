@@ -25,6 +25,7 @@ export * from './invitation/usecases/create-invitation.js';
 export * from './invitation/usecases/update-draft.js';
 export * from './invitation/usecases/publish-invitation.js';
 export * from './invitation/usecases/manage-publication.js';
+export * from './invitation/usecases/delete-invitation.js';
 export * from './invitation/ports/invitation-repository.js';
 
 // ── rsvp (M7) ───────────────────────────────────────────────────────────────

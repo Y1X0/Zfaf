@@ -5,6 +5,7 @@ import { getTranslations } from 'next-intl/server';
 import { FREE_BETA_PLAN, customerScopeFor, resolveEntitlements } from '@zfaf/core';
 
 import { SignOutButton } from '../../../../auth/AuthForms.js';
+import { DeleteInvitationButton } from '../../../../dashboard/DeleteInvitationButton.js';
 import { NewInvitation, type TemplateChoice } from '../../../../dashboard/NewInvitation.js';
 import { localePath } from '../../../../i18n/href.js';
 import { IslandMessages } from '../../../../i18n/island.js';
@@ -138,6 +139,9 @@ export default async function DashboardPage({
                     {t('view')}
                   </a>
                 ) : null}
+                <IslandMessages namespaces={['dashboard']}>
+                  <DeleteInvitationButton invitationId={invitation.id} />
+                </IslandMessages>
               </div>
             </li>
           ))}
