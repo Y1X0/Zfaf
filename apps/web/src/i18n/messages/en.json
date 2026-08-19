@@ -20,6 +20,7 @@
     "templates": "Templates",
     "pricing": "Pricing",
     "faq": "FAQ",
+    "login": "Login",
     "terms": "Terms",
     "privacy": "Privacy",
     "dashboard": "Dashboard"
@@ -53,13 +54,15 @@
     "templates": {
       "title": "Templates",
       "subtitle": "Every template is designed for Arabic first, and for the phone before anything else.",
-      "empty": "Templates are on the way."
+      "empty": "Templates are on the way.",
+      "useTemplate": "Use this template"
     },
     "pricing": {
       "title": "Pricing",
       "subtitle": "Pay once per invitation. No monthly subscription and no automatic renewal.",
       "note": "Prices are shown in your market's currency and include the tax that applies there.",
-      "comingSoon": "Plans and prices will be announced before launch."
+      "comingSoon": "Plans and prices will be announced before launch.",
+      "startFree": "Start creating free"
     },
     "faq": {
       "title": "Frequently asked questions",

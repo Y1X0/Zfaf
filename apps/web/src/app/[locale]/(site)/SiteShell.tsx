@@ -58,6 +58,7 @@ export function SiteShell({
             <a href={href('/templates')}>{t('templates')}</a>
             <a href={href('/pricing')}>{t('pricing')}</a>
             <a href={href('/faq')}>{t('faq')}</a>
+            <a href={href('/login')}>{t('login')}</a>
             <a
               href={otherLocalePath(locale, localePath(locale, path))}
               data-testid="language-switch"

@@ -34,7 +34,7 @@ export default async function HomePage({
         <h1>{t('hero.title')}</h1>
         <p>{t('hero.subtitle')}</p>
         <div className="zf-cta">
-          <a className="zf-btn" href={localePath(locale, '/pricing')}>
+          <a className="zf-btn" href={localePath(locale, '/register')}>
             {t('hero.cta')}
           </a>
           <a className="zf-btn zf-btn--quiet" href={localePath(locale, '/templates')}>
