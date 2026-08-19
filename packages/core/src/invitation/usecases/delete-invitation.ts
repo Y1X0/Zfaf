@@ -23,7 +23,7 @@ export async function deleteInvitation(
   input: DeleteInvitationInput,
   deps: DeleteInvitationDeps,
 ): Promise<DeleteInvitationResult> {
-  const decision = can(input.actor, 'invitation:edit', {
+  const decision = can(input.actor, 'invitation:delete', {
     kind: 'invitation',
     id: input.invitationId,
     ownerId: input.invitationOwnerId ?? '',
