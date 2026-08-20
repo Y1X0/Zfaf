@@ -541,6 +541,7 @@ model MediaAsset {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  orphanedAt DateTime? @map("orphaned_at") @db.Timestamptz(3)
 
   owner      User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   invitation Invitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
@@ -550,6 +551,8 @@ model MediaAsset {
   @@index([invitationId])
   // The stuck-upload sweep.
   @@index([status])
+  // The orphaned media purge job.
+  @@index([orphanedAt])
   @@map("media_assets")
 }
 

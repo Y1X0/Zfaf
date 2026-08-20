@@ -79,6 +79,9 @@ export interface MediaRepository {
   markStatus(scope: TenantScope, mediaId: string, status: MediaStatus): Promise<void>;
 
   softDelete(scope: TenantScope, mediaId: string, deletedAt: Date): Promise<void>;
+
+  /** Mark all media attached to an invitation as orphaned (invitation deleted). */
+  orphanByInvitation(invitationId: string, orphanedAt: Date): Promise<void>;
 }
 
 /**
@@ -124,6 +127,9 @@ export interface MediaMaintenanceRepository {
 
   /** Soft-deleted assets past the recovery window. */
   findPurgeableAssets(deletedBefore: Date, limit: number): Promise<readonly MediaAssetRecord[]>;
+
+  /** Media orphaned from deleted invitations older than the grace period. */
+  findOrphanedMedia(orphanedBefore: Date, limit: number): Promise<readonly MediaAssetRecord[]>;
 
   /**
    * Assets left in `processing` by a run that never finished (ADR-0023).

@@ -73,6 +73,7 @@ export * from './media/domain/media-deletion.js';
 export * from './media/domain/queue-contract.js';
 export * from './media/usecases/upload-media.js';
 export * from './media/usecases/manage-media.js';
+export * from './media/usecases/purge-orphaned-media.js';
 
 // ── identity (ADR-0006, ADR-0018) ───────────────────────────────────────────
 export * from './identity/domain/email.js';

@@ -1,0 +1,71 @@
+import {
+  adminAuditor,
+  adminNotFound,
+  adminSession,
+  withAdminHeaders,
+} from '../../../../../../../server/admin.js';
+import { container } from '../../../../../../../server/container.js';
+import { failure, ok } from '../../../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../../../server/origin.js';
+
+/**
+ * `POST /api/admin/users/{id}/verify-email` — mark an account as email-verified.
+ *
+ * Used in pilot mode when PILOT_NO_EMAIL=true disables the actual email
+ * provider but EMAIL_NOT_VERIFIED authorization check still blocks publishing.
+ * This creates a manual verification path for admin to enable pilot accounts.
+ *
+ * The action is audited: who verified whom and when.
+ */
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const crossSite = requireSameOrigin(request);
+  if (crossSite) return crossSite;
+
+  const gate = await adminSession();
+  if (!gate.ok) return gate.response;
+
+  const { id } = await context.params;
+  const deps = container();
+
+  try {
+    const user = await deps.users.findById(id);
+    if (!user) return withAdminHeaders(adminNotFound());
+
+    const now = deps.clock.now();
+
+    await deps.users.markEmailVerified(id, now);
+
+    await deps.audit.record(
+      {
+        actorId: gate.session.actor.id,
+        actorType: 'user',
+        action: 'admin.user.email_verified',
+        resourceType: 'user',
+        resourceId: id,
+        metadata: {
+          email: user.email,
+        },
+        ipHash: gate.ipHash,
+      },
+      now,
+    );
+
+    return withAdminHeaders(ok({ userId: id, verified: true }));
+  } catch (error) {
+    deps.logger.error('admin.verify_email_failed', {
+      userId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    deps.errors.capture({ error, event: 'admin.verify_email_failed', fields: { userId: id } });
+    return withAdminHeaders(
+      failure(500, 'VERIFICATION_FAILED', 'Could not verify email address'),
+    );
+  }
+}

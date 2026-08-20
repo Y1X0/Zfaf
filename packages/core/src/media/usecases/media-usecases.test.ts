@@ -128,6 +128,10 @@ class FakeMediaRepository implements MediaRepository {
     const row = this.rows.get(mediaId);
     if (row) this.rows.set(mediaId, { ...row, deletedAt });
   }
+
+  async orphanByInvitation(): Promise<void> {
+    // no-op for testing
+  }
 }
 
 class FakeStorage implements StorageProvider {
@@ -578,6 +582,7 @@ describe('sweeping abandoned and expired media', () => {
   class FakeMaintenance implements MediaMaintenanceRepository {
     stale: MediaAssetRecord[] = [];
     purgeable: MediaAssetRecord[] = [];
+    orphaned: MediaAssetRecord[] = [];
     stuck: MediaAssetRecord[] = [];
     hardDeleted: string[] = [];
     /** What cutoff the redrive asked for, so the window can be asserted. */
@@ -588,6 +593,9 @@ describe('sweeping abandoned and expired media', () => {
     }
     async findPurgeableAssets(): Promise<readonly MediaAssetRecord[]> {
       return this.purgeable;
+    }
+    async findOrphanedMedia(): Promise<readonly MediaAssetRecord[]> {
+      return this.orphaned;
     }
     async findStuckProcessing(updatedBefore: Date): Promise<readonly MediaAssetRecord[]> {
       this.stuckBefore = updatedBefore;

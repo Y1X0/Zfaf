@@ -206,6 +206,13 @@ export class PrismaMediaRepository implements MediaRepository {
       data: { deletedAt },
     });
   }
+
+  async orphanByInvitation(invitationId: string, orphanedAt: Date): Promise<void> {
+    await this.prisma.mediaAsset.updateMany({
+      where: { invitationId, orphanedAt: null },
+      data: { orphanedAt },
+    });
+  }
 }
 
 /**
@@ -298,6 +305,18 @@ export class PrismaMediaMaintenanceRepository implements MediaMaintenanceReposit
     const rows = await this.prisma.mediaAsset.findMany({
       where: { deletedAt: { not: null, lt: deletedBefore } },
       orderBy: { deletedAt: 'asc' },
+      take: limit,
+    });
+    return rows.map(toRecord);
+  }
+
+  async findOrphanedMedia(
+    orphanedBefore: Date,
+    limit: number,
+  ): Promise<readonly MediaAssetRecord[]> {
+    const rows = await this.prisma.mediaAsset.findMany({
+      where: { orphanedAt: { not: null, lt: orphanedBefore } },
+      orderBy: { orphanedAt: 'asc' },
       take: limit,
     });
     return rows.map(toRecord);

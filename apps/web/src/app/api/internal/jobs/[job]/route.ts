@@ -5,7 +5,13 @@ import {
   PrismaMediaMaintenanceRepository,
   getPrismaClient,
 } from '@zfaf/db';
-import { expireDueInvitations, flushAnalytics, redriveStuckMedia, sweepMedia } from '@zfaf/core';
+import {
+  expireDueInvitations,
+  flushAnalytics,
+  purgeOrphanedMedia,
+  redriveStuckMedia,
+  sweepMedia,
+} from '@zfaf/core';
 
 import { container } from '../../../../../server/container.js';
 import { dispatchMediaProcessing } from '../../../../../server/media-dispatch.js';
@@ -52,7 +58,13 @@ import { failure, notFound, ok } from '../../../../../server/responses.js';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const JOBS = ['sweep-media', 'expire-invitations', 'flush-analytics', 'redrive-media'] as const;
+const JOBS = [
+  'sweep-media',
+  'expire-invitations',
+  'flush-analytics',
+  'redrive-media',
+  'purge-orphaned-media',
+] as const;
 type Job = (typeof JOBS)[number];
 
 function isJob(value: string): value is Job {
@@ -130,6 +142,14 @@ async function run(job: Job): Promise<Record<string, unknown>> {
       const report = await flushAnalytics({
         buffer: deps.analyticsBuffer,
         repository: new PrismaAnalyticsRepository(prisma),
+      });
+      return { ...report };
+    }
+    case 'purge-orphaned-media': {
+      const report = await purgeOrphanedMedia({
+        repository: new PrismaMediaMaintenanceRepository(prisma),
+        storage: deps.storage,
+        clock: deps.clock,
       });
       return { ...report };
     }

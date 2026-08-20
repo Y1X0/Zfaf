@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { type Actor, type UserRole, anonymous } from '../../authz/actor.js';
 import type { InvitationRecord, InvitationRepository } from '../ports/invitation-repository.js';
+import type { MediaRepository } from '../../media/ports/media-repository.js';
 import { deleteInvitation } from './delete-invitation.js';
 import { systemClock } from '../../ports/clock.js';
 
@@ -55,8 +56,15 @@ function harness(options: { existing?: InvitationRecord | null } = {}) {
     },
   } as unknown as InvitationRepository;
 
+  const media = {
+    orphanByInvitation: async () => {
+      // no-op for testing
+    },
+  } as unknown as MediaRepository;
+
   return {
     repository,
+    media,
     inv,
   };
 }
@@ -65,7 +73,7 @@ describe('deleteInvitation', () => {
   it('deletes an invitation owned by the actor', async () => {
     const owner = actor('user-1', 'customer');
     const inv = invitation({ ownerId: 'user-1' });
-    const { repository } = harness({ existing: inv });
+    const { repository, media } = harness({ existing: inv });
 
     const result = await deleteInvitation(
       {
@@ -75,6 +83,7 @@ describe('deleteInvitation', () => {
       },
       {
         repository,
+        media,
         clock: systemClock,
       },
     );
@@ -85,7 +94,7 @@ describe('deleteInvitation', () => {
   it('rejects deletion by non-owner', async () => {
     const notOwner = actor('user-2', 'customer');
     const inv = invitation({ ownerId: 'user-1' });
-    const { repository } = harness({ existing: inv });
+    const { repository, media } = harness({ existing: inv });
 
     const result = await deleteInvitation(
       {
@@ -95,6 +104,7 @@ describe('deleteInvitation', () => {
       },
       {
         repository,
+        media,
         clock: systemClock,
       },
     );
@@ -108,7 +118,7 @@ describe('deleteInvitation', () => {
   it('rejects deletion by anonymous user', async () => {
     const anon = anonymous('ip-hash');
     const inv = invitation({ ownerId: 'user-1' });
-    const { repository } = harness({ existing: inv });
+    const { repository, media } = harness({ existing: inv });
 
     const result = await deleteInvitation(
       {
@@ -118,6 +128,7 @@ describe('deleteInvitation', () => {
       },
       {
         repository,
+        media,
         clock: systemClock,
       },
     );
@@ -130,7 +141,7 @@ describe('deleteInvitation', () => {
 
   it('reports not found when invitation does not exist', async () => {
     const owner = actor('user-1', 'customer');
-    const { repository } = harness({ existing: null });
+    const { repository, media } = harness({ existing: null });
 
     const result = await deleteInvitation(
       {
@@ -140,6 +151,7 @@ describe('deleteInvitation', () => {
       },
       {
         repository,
+        media,
         clock: systemClock,
       },
     );

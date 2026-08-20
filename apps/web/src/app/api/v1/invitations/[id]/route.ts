@@ -72,6 +72,7 @@ export async function DELETE(
     },
     {
       repository: deps.invitations,
+      media: deps.media,
       clock: deps.clock,
     },
   );

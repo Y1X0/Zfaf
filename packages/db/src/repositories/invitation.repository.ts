@@ -441,6 +441,16 @@ export class PrismaInvitationRepository implements InvitationRepository {
     return result.count > 0;
   }
 
+  /**
+   * Soft-deleted invitations are invisible to all queries (deletedAt check).
+   *
+   * Recovery is only via manual database intervention — there is no customer-
+   * facing restore. Associated media assets are marked orphaned and purged after
+   * 7 days, giving ops a window to manually restore if needed. If an invitation
+   * is restored after media is purged, it will have no images but the row
+   * remains recoverable.
+   */
+
   async listVersions(
     id: string,
     scope: TenantScope,

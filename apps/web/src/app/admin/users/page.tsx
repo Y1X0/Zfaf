@@ -6,6 +6,7 @@ import { type AdminUserRow, adminListUsers } from '@zfaf/core';
 import { adminAuditor } from '../../../server/admin.js';
 import { container } from '../../../server/container.js';
 import { requireAdmin } from '../../../server/request-context.js';
+import { VerifyEmailButton } from './VerifyEmailButton.js';
 
 /**
  * Account browse and search (D8.6).
@@ -105,7 +106,13 @@ function Row({ row }: { row: AdminUserRow }): ReactElement {
           {row.status}
         </span>
       </td>
-      <td>{row.emailVerified ? 'yes' : 'no'}</td>
+      <td>
+        {row.emailVerified ? (
+          'yes'
+        ) : (
+          <VerifyEmailButton userId={row.id} email={row.email} />
+        )}
+      </td>
       <td>{row.invitationCount}</td>
     </tr>
   );

@@ -485,7 +485,7 @@
     "view": "Public page",
     "delete": "Delete",
     "deleting": "Deleting…",
-    "deleteConfirm": "Delete this invitation permanently? This cannot be undone.",
+    "deleteConfirm": "Delete this invitation permanently? All uploaded photos will be removed and this cannot be undone.",
     "verifyNotice": "Your email is not verified yet. You can keep editing; verification is only needed before publishing.",
     "status": {
       "DRAFT": "Draft",

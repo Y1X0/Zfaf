@@ -3,6 +3,7 @@ import { can } from '../../authz/can.js';
 import { tenantScopeFor } from '../../authz/tenant-scope.js';
 import type { Clock } from '../../ports/clock.js';
 import type { InvitationRepository } from '../ports/invitation-repository.js';
+import type { MediaRepository } from '../../media/ports/media-repository.js';
 
 export interface DeleteInvitationInput {
   readonly actor: Actor;
@@ -12,6 +13,7 @@ export interface DeleteInvitationInput {
 
 export interface DeleteInvitationDeps {
   readonly repository: InvitationRepository;
+  readonly media: MediaRepository;
   readonly clock: Clock;
 }
 
@@ -37,10 +39,13 @@ export async function deleteInvitation(
     return { ok: false, code: 'NO_TENANT_SCOPE', message: 'Not permitted' };
   }
 
-  const deleted = await deps.repository.softDelete(input.invitationId, scope, deps.clock.now());
+  const now = deps.clock.now();
+  const deleted = await deps.repository.softDelete(input.invitationId, scope, now);
   if (!deleted) {
     return { ok: false, code: 'NOT_FOUND', message: 'Invitation not found' };
   }
+
+  await deps.media.orphanByInvitation(input.invitationId, now);
 
   return { ok: true };
 }
