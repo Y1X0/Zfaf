@@ -31,7 +31,7 @@
       "scale": "normal",
       "displayWeight": 400
     },
-    "spacing": "airy",
+    "spacing": "normal",
     "radius": "sharp",
     "buttons": "outline",
     "dividers": "none",
@@ -60,7 +60,7 @@
       "id": "couple",
       "type": "couple",
       "variant": "couple.namesOnly",
-      "enabled": true,
+      "enabled": false,
       "required": false,
       "order": 2,
       "props": { "heading": "", "showMessage": true }
@@ -72,7 +72,7 @@
       "enabled": true,
       "required": false,
       "order": 3,
-      "props": { "heading": "باقٍ", "showSeconds": false }
+      "props": { "heading": "", "showSeconds": false }
     },
     {
       "id": "events",

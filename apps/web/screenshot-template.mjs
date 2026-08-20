@@ -23,7 +23,7 @@ await page.addStyleTag({
 // Take screenshot
 await page.screenshot({
   path: '/home/user/Zfaf/packages/invitation-renderer/templates/elegant-simple/preview-390px.png',
-  fullPage: false,
+  fullPage: true,
 });
 
 console.log('✓ Screenshot saved: packages/invitation-renderer/templates/elegant-simple/preview-390px.png');

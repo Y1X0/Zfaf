@@ -44,6 +44,29 @@ function units(props: CountdownProps): readonly string[] {
   return props.showSeconds ? ['days', 'hours', 'minutes', 'seconds'] : ['days', 'hours', 'minutes'];
 }
 
+function calculateCountdown(content: SectionRenderProps<CountdownProps>['content'], props: CountdownProps): Record<string, number> {
+  const parsed = EventDateTime.create({
+    date: content.wedding.date,
+    startTime: content.wedding.startTime,
+    timezone: content.wedding.timezone,
+  });
+
+  if (!parsed.ok) {
+    return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+  }
+
+  const now = new Date();
+  const target = new Date(parsed.value.toInstant().toISOString());
+  const diff = Math.max(0, target.getTime() - now.getTime());
+
+  const seconds = Math.floor((diff / 1000) % 60);
+  const minutes = Math.floor((diff / (1000 * 60)) % 60);
+  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  return { days, hours, minutes, seconds };
+}
+
 function Shell({
   renderProps,
   variantClass,
@@ -53,6 +76,7 @@ function Shell({
 }): ReactElement {
   const { props, content, locale, sectionId } = renderProps;
   const labels = UNIT_LABELS[locale];
+  const countdown = calculateCountdown(content, props);
 
   return (
     <SectionShell sectionId={sectionId} variantClass={variantClass}>
@@ -67,9 +91,8 @@ function Shell({
       >
         {units(props).map((unit) => (
           <div className="zf-countdown__unit" key={unit}>
-            {/* Placeholder until the client script starts; never a computed value. */}
             <span className="zf-countdown__value" data-countdown-unit={unit}>
-              --
+              {String(countdown[unit as keyof typeof countdown]).padStart(2, '0')}
             </span>
             <span className="zf-countdown__label">{labels[unit]}</span>
           </div>
