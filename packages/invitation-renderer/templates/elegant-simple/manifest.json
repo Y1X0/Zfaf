@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "key": "elegant-simple",
+  "version": 1,
+  "meta": {
+    "name": { "ar": "أنيق بسيط", "en": "Elegant Simple" },
+    "description": {
+      "ar": "دعوة بسيطة أنيقة بخط عربي كلاسيكي، خلفية كريمية متدرّجة، وحد أدنى من الزخرفة.",
+      "en": "A simple, elegant invitation with classical Arabic typography, cream gradient background, and minimal ornament."
+    },
+    "category": "minimal",
+    "author": "Zfaf",
+    "previewImage": "preview-elegant-simple",
+    "requiredPlanLevel": 0,
+    "supportedLocales": ["ar", "en"]
+  },
+  "theme": {
+    "colors": {
+      "primary": "#8a6c3f",
+      "secondary": "#3a3a3a",
+      "accent": "#d9c9ae",
+      "background": "#faf8f3",
+      "surface": "#f5f2eb",
+      "textPrimary": "#2a2a2a",
+      "textSecondary": "#6a6a6a",
+      "overlay": "rgba(42, 42, 42, 0.25)"
+    },
+    "typography": {
+      "displayFont": "aref-ruqaa",
+      "bodyFont": "amiri",
+      "scale": "normal",
+      "displayWeight": 400
+    },
+    "spacing": "airy",
+    "radius": "sharp",
+    "buttons": "outline",
+    "dividers": "none",
+    "background": { "kind": "gradient", "value": "cream-to-ivory", "overlayOpacity": 0 },
+    "motion": { "intensity": "subtle", "effects": [] },
+    "numerals": "arabic-indic"
+  },
+  "customizable": {
+    "colors": ["primary", "accent", "background"],
+    "fonts": false,
+    "spacing": false,
+    "motion": false,
+    "sectionOrder": true
+  },
+  "sections": [
+    {
+      "id": "hero",
+      "type": "hero",
+      "variant": "hero.typographic",
+      "enabled": true,
+      "required": true,
+      "order": 1,
+      "props": { "showDate": true, "useShortName": false, "eyebrow": "بسرور نحتفي بكم" }
+    },
+    {
+      "id": "couple",
+      "type": "couple",
+      "variant": "couple.namesOnly",
+      "enabled": true,
+      "required": false,
+      "order": 2,
+      "props": { "heading": "", "showMessage": true }
+    },
+    {
+      "id": "countdown",
+      "type": "countdown",
+      "variant": "countdown.minimalDigits",
+      "enabled": true,
+      "required": false,
+      "order": 3,
+      "props": { "heading": "باقٍ", "showSeconds": false }
+    },
+    {
+      "id": "events",
+      "type": "events",
+      "variant": "events.simpleList",
+      "enabled": true,
+      "required": false,
+      "order": 4,
+      "props": { "heading": "البرنامج", "showDescriptions": true, "showVenue": true }
+    },
+    {
+      "id": "location",
+      "type": "location",
+      "variant": "location.mapCard",
+      "enabled": true,
+      "required": false,
+      "order": 5,
+      "props": { "heading": "المكان", "buttonLabel": "" }
+    },
+    {
+      "id": "gallery",
+      "type": "gallery",
+      "variant": "gallery.grid",
+      "enabled": true,
+      "required": false,
+      "order": 6,
+      "props": { "heading": "ذكرياتنا", "maxImages": 12 }
+    },
+    {
+      "id": "message",
+      "type": "message",
+      "variant": "message.centeredQuote",
+      "enabled": true,
+      "required": false,
+      "order": 7,
+      "props": { "heading": "", "body": "", "attribution": "" }
+    },
+    {
+      "id": "rsvp",
+      "type": "rsvp",
+      "variant": "rsvp.compactForm",
+      "enabled": true,
+      "required": false,
+      "order": 8,
+      "props": { "heading": "تأكيد الحضور", "prompt": "تشرفونا بوجودكم", "showNote": true }
+    },
+    {
+      "id": "music",
+      "type": "music",
+      "variant": "music.floatingButton",
+      "enabled": true,
+      "required": false,
+      "order": 9,
+      "props": { "label": "", "showAttribution": false }
+    },
+    {
+      "id": "footer",
+      "type": "footer",
+      "variant": "footer.minimal",
+      "enabled": true,
+      "required": true,
+      "order": 10,
+      "props": { "closingLine": "بكل الحب", "showBranding": true }
+    }
+  ],
+  "assets": {
+    "ornaments": [],
+    "patterns": [],
+    "fontSubsets": ["arabic-basic", "latin-basic"]
+  }
+}
