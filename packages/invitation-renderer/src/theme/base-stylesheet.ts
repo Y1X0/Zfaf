@@ -65,10 +65,10 @@ export const BASE_STYLESHEET = `
 .zf-location__button{margin-block-start:1rem}
 
 .zf-gallery__grid{list-style:none;padding-inline-start:0;margin-block:0;display:grid;gap:.75rem;grid-template-columns:repeat(auto-fill,minmax(9rem,1fr))}
-.zf-gallery__item{background:var(--zf-color-accent);border-radius:var(--zf-radius);overflow:hidden}
-.zf-gallery__image{inline-size:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--zf-radius);display:block}
+.zf-gallery__item{aspect-ratio:1;background:var(--zf-color-accent);border-radius:var(--zf-radius);overflow:hidden}
+.zf-gallery__image{inline-size:100%;height:100%;object-fit:cover;display:block}
 .zf-gallery__image[data-failed]{display:none}
-.zf-gallery--masonry .zf-gallery__image{aspect-ratio:auto}
+.zf-gallery--masonry .zf-gallery__item{aspect-ratio:auto}
 .zf-gallery--carousel .zf-gallery__grid{grid-auto-flow:column;grid-auto-columns:min(70%,16rem);grid-template-columns:none;overflow-x:auto;scroll-snap-type:x mandatory}
 
 .zf-rsvp__form{display:grid;gap:1rem;max-inline-size:28rem;margin-inline:auto;text-align:start}
