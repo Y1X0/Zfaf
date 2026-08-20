@@ -14,6 +14,7 @@ export interface PurgeMediaReport {
   readonly deletedFromDatabase: number;
   readonly storageBytesFreed: number;
   readonly failed: number;
+  readonly remaining: number;
 }
 
 export async function purgeOrphanedMedia(
@@ -23,28 +24,34 @@ export async function purgeOrphanedMedia(
   const now = deps.clock.now();
   const olderThan = new Date(now.getTime() - ageThresholdDays * 24 * 60 * 60 * 1000);
 
-  let examined = 0;
+  const examinedIds = new Set<string>();
   let deletedFromStorage = 0;
   let deletedFromDatabase = 0;
   let storageBytesFreed = 0;
   let failed = 0;
+  let remaining = 0;
 
   // Process in batches to avoid holding too much in memory at once.
   const batchSize = 100;
-  let hasMore = true;
+  const maxIterations = 1000; // Backstop: ~100k items max per run
+  let iteration = 0;
 
-  while (hasMore) {
+  while (iteration < maxIterations) {
+    iteration += 1;
     const batch = await deps.repository.findOrphanedMedia(olderThan, batchSize);
     if (batch.length === 0) break;
 
-    examined += batch.length;
+    let deletedInBatch = 0;
 
     for (const asset of batch) {
+      examinedIds.add(asset.id);
+
       try {
         await deps.storage.delete(asset.storageKey);
         deletedFromStorage += 1;
         await deps.repository.hardDelete(asset.id);
         deletedFromDatabase += 1;
+        deletedInBatch += 1;
         storageBytesFreed += asset.sizeBytes;
       } catch (error) {
         // S3/B2 DeleteObject is idempotent (204 on missing key). If we get
@@ -53,6 +60,7 @@ export async function purgeOrphanedMedia(
           try {
             await deps.repository.hardDelete(asset.id);
             deletedFromDatabase += 1;
+            deletedInBatch += 1;
             storageBytesFreed += asset.sizeBytes;
           } catch {
             failed += 1;
@@ -63,16 +71,21 @@ export async function purgeOrphanedMedia(
       }
     }
 
-    // Stop if we got fewer than requested: there are no more.
-    hasMore = batch.length === batchSize;
+    // Terminate if no progress in this batch. Prevents infinite loop when all
+    // deletes fail (e.g., expired credentials, network partition).
+    if (deletedInBatch === 0) {
+      remaining = batch.length;
+      break;
+    }
   }
 
   return {
-    examined,
+    examined: examinedIds.size,
     deletedFromStorage,
     deletedFromDatabase,
     storageBytesFreed,
     failed,
+    remaining,
   };
 }
 

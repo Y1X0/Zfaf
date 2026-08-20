@@ -590,8 +590,6 @@ describe('sweeping abandoned and expired media', () => {
     stuckBefore: Date | null = null;
     /** What cutoff the orphan purge asked for, so the window can be asserted. */
     orphanedBefore: Date | null = null;
-    /** Tracks which IDs were already returned to simulate pagination. */
-    private returnedOrphanedIds = new Set<string>();
 
     async findStalePendingUploads(): Promise<readonly MediaAssetRecord[]> {
       return this.stale;
@@ -601,11 +599,9 @@ describe('sweeping abandoned and expired media', () => {
     }
     async findOrphanedMedia(orphanedBefore: Date, limit: number): Promise<readonly MediaAssetRecord[]> {
       this.orphanedBefore = orphanedBefore;
-      // Return next batch of items not yet returned (pagination).
-      const unreturned = this.orphaned.filter((a) => !this.returnedOrphanedIds.has(a.id));
-      const batch = unreturned.slice(0, limit);
-      batch.forEach((a) => this.returnedOrphanedIds.add(a.id));
-      return batch;
+      // Real query: return oldest N rows every call. Rows only leave when hardDelete removes them.
+      // This exposes the infinite-loop bug if batch fails entirely.
+      return this.orphaned.slice(0, limit);
     }
     async findStuckProcessing(updatedBefore: Date): Promise<readonly MediaAssetRecord[]> {
       this.stuckBefore = updatedBefore;
@@ -613,10 +609,8 @@ describe('sweeping abandoned and expired media', () => {
     }
     async hardDelete(mediaId: string): Promise<void> {
       this.hardDeleted.push(mediaId);
-    }
-
-    resetOrphanPagination(): void {
-      this.returnedOrphanedIds.clear();
+      // When deleted, remove from orphaned list so it won't be returned again
+      this.orphaned = this.orphaned.filter((a) => a.id !== mediaId);
     }
   }
 
@@ -908,7 +902,7 @@ describe('sweeping abandoned and expired media', () => {
       expect(report.failed).toBe(1);
     });
 
-    it('continues processing after a failure', async () => {
+    it('continues processing after a failure and retries failed items', async () => {
       const repository = new FakeMaintenance();
       repository.orphaned = [
         orphanedAsset('good-1', new Date('2026-08-01T00:00:00Z')),
@@ -925,7 +919,9 @@ describe('sweeping abandoned and expired media', () => {
 
       expect(repository.hardDeleted).toEqual(['good-1', 'good-2']);
       expect(report.deletedFromDatabase).toBe(2);
-      expect(report.failed).toBe(1);
+      // 'bad' fails on first batch, then retried on second batch (no progress stops loop)
+      expect(report.failed).toBe(2);
+      expect(report.examined).toBe(3);
     });
 
     it('is idempotent when run twice on same set', async () => {
@@ -937,13 +933,12 @@ describe('sweeping abandoned and expired media', () => {
       repository.orphaned = assets;
       const storage = new FakeStorage();
 
-      // First run
+      // First run deletes both
       const report1 = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+      expect(report1.examined).toBe(2);
       expect(report1.deletedFromDatabase).toBe(2);
 
-      // Second run: no new assets
-      repository.orphaned = [];
-      repository.resetOrphanPagination();
+      // Second run: assets are already deleted, nothing to do
       const report2 = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
       expect(report2.examined).toBe(0);
       expect(report2.deletedFromDatabase).toBe(0);
@@ -975,6 +970,53 @@ describe('sweeping abandoned and expired media', () => {
       const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
 
       expect(report.storageBytesFreed).toBe(8_000_000);
+    });
+
+    it('terminates and reports failure when all storage deletes fail with non-404 error', async () => {
+      const repository = new FakeMaintenance();
+      // Batch of 100 items where ALL fail to delete (e.g., expired credentials, network partition)
+      repository.orphaned = Array.from({ length: 100 }, (_, i) =>
+        orphanedAsset(`expired-creds-${i}`, new Date('2026-08-01T00:00:00Z')),
+      );
+      const storage = new FakeStorage();
+
+      // All storage deletes throw non-404 error
+      storage.delete = async () => {
+        throw new Error('Credentials expired');
+      };
+
+      // This should NOT hang. Must terminate and report all failed.
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      expect(report.examined).toBe(100);
+      expect(report.deletedFromStorage).toBe(0);
+      expect(report.deletedFromDatabase).toBe(0);
+      expect(report.failed).toBe(100);
+      expect(report.remaining).toBeGreaterThan(0);
+    });
+
+    it('counts distinct assets examined via Set, even when some are retried', async () => {
+      const repository = new FakeMaintenance();
+      repository.orphaned = [
+        orphanedAsset('asset-1', new Date('2026-08-01T00:00:00Z')),
+        orphanedAsset('asset-2', new Date('2026-08-01T00:00:00Z')),
+      ];
+      const storage = new FakeStorage();
+
+      // asset-1 fails, asset-2 succeeds
+      let callCount = 0;
+      storage.delete = async (key: StorageKey) => {
+        callCount += 1;
+        if (key.includes('asset-1')) throw new Error('Network error');
+      };
+
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      // Distinct assets examined = 2, but asset-1 retried in second batch after asset-2 deleted
+      expect(report.examined).toBe(2);
+      expect(callCount).toBe(3); // asset-1, asset-2, asset-1 again
+      expect(report.failed).toBe(2); // asset-1 fails both times
+      expect(report.remaining).toBe(1); // asset-1 left after no progress
     });
   });
 });
