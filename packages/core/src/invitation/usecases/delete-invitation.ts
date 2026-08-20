@@ -45,6 +45,10 @@ export async function deleteInvitation(
     return { ok: false, code: 'NOT_FOUND', message: 'Invitation not found' };
   }
 
+  // TODO: softDelete and orphanByInvitation are not atomic. If orphanByInvitation
+  // fails or the process dies between calls, media is never marked orphaned and
+  // quota leaks silently. Long-term: wrap both in a transaction or have the purge
+  // job find media by invitation.deletedAt state rather than relying on orphanedAt.
   await deps.media.orphanByInvitation(input.invitationId, now);
 
   return { ok: true };

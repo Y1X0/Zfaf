@@ -23,6 +23,7 @@ import type {
 } from '../ports/storage-provider.js';
 import { completeUpload, requestUploadUrl } from './upload-media.js';
 import { deleteMedia, redriveStuckMedia, sweepMedia } from './manage-media.js';
+import { purgeOrphanedMedia } from './purge-orphaned-media.js';
 
 /**
  * The upload, deletion and sweep use cases.
@@ -587,6 +588,10 @@ describe('sweeping abandoned and expired media', () => {
     hardDeleted: string[] = [];
     /** What cutoff the redrive asked for, so the window can be asserted. */
     stuckBefore: Date | null = null;
+    /** What cutoff the orphan purge asked for, so the window can be asserted. */
+    orphanedBefore: Date | null = null;
+    /** Tracks which IDs were already returned to simulate pagination. */
+    private returnedOrphanedIds = new Set<string>();
 
     async findStalePendingUploads(): Promise<readonly MediaAssetRecord[]> {
       return this.stale;
@@ -594,8 +599,13 @@ describe('sweeping abandoned and expired media', () => {
     async findPurgeableAssets(): Promise<readonly MediaAssetRecord[]> {
       return this.purgeable;
     }
-    async findOrphanedMedia(): Promise<readonly MediaAssetRecord[]> {
-      return this.orphaned;
+    async findOrphanedMedia(orphanedBefore: Date, limit: number): Promise<readonly MediaAssetRecord[]> {
+      this.orphanedBefore = orphanedBefore;
+      // Return next batch of items not yet returned (pagination).
+      const unreturned = this.orphaned.filter((a) => !this.returnedOrphanedIds.has(a.id));
+      const batch = unreturned.slice(0, limit);
+      batch.forEach((a) => this.returnedOrphanedIds.add(a.id));
+      return batch;
     }
     async findStuckProcessing(updatedBefore: Date): Promise<readonly MediaAssetRecord[]> {
       this.stuckBefore = updatedBefore;
@@ -603,6 +613,10 @@ describe('sweeping abandoned and expired media', () => {
     }
     async hardDelete(mediaId: string): Promise<void> {
       this.hardDeleted.push(mediaId);
+    }
+
+    resetOrphanPagination(): void {
+      this.returnedOrphanedIds.clear();
     }
   }
 
@@ -759,6 +773,208 @@ describe('sweeping abandoned and expired media', () => {
 
       expect(called).toBe(0);
       expect(report.redriven).toBe(0);
+    });
+  });
+
+  describe('purging orphaned media', () => {
+    function orphanedAsset(
+      id: string,
+      orphanedAt: Date,
+      overrides: Partial<MediaAssetRecord> = {},
+    ): MediaAssetRecord {
+      return {
+        id,
+        ownerId: OWNER_ID,
+        invitationId: INVITATION_ID,
+        purpose: 'gallery',
+        storageKey: `media/${OWNER_ID}/${INVITATION_ID}/${id}/original.jpg` as StorageKey,
+        originalFilename: 'photo.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1000,
+        signedMaxBytes: 8 * 1024 * 1024,
+        width: null,
+        height: null,
+        blurhash: null,
+        variants: {},
+        status: 'ready',
+        scanStatus: 'clean',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+        deletedAt: null,
+        ...overrides,
+      };
+    }
+
+    it('queries for media orphaned 7 days before now', async () => {
+      const repository = new FakeMaintenance();
+      const storage = new FakeStorage();
+
+      await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      // Should query for media orphaned before 2026-08-09T12:00:00Z
+      const expectedThreshold = new Date(NOW.getTime() - 7 * 24 * 60 * 60 * 1000);
+      expect(repository.orphanedBefore?.toISOString()).toBe(expectedThreshold.toISOString());
+    });
+
+    it('respects custom age threshold', async () => {
+      const repository = new FakeMaintenance();
+      const storage = new FakeStorage();
+
+      await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) }, 3);
+
+      const expectedThreshold = new Date(NOW.getTime() - 3 * 24 * 60 * 60 * 1000);
+      expect(repository.orphanedBefore?.toISOString()).toBe(expectedThreshold.toISOString());
+    });
+
+    it('deletes from storage before database', async () => {
+      const repository = new FakeMaintenance();
+      const asset = orphanedAsset('ordered', new Date('2026-08-01T00:00:00Z'));
+      repository.orphaned = [asset];
+      const storage = new FakeStorage();
+      const order: string[] = [];
+
+      const originalDelete = storage.delete.bind(storage);
+      storage.delete = async (key: StorageKey) => {
+        order.push('storage');
+        return originalDelete(key);
+      };
+
+      const originalHardDelete = repository.hardDelete.bind(repository);
+      repository.hardDelete = async (id: string) => {
+        order.push('database');
+        return originalHardDelete(id);
+      };
+
+      await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      expect(order).toEqual(['storage', 'database']);
+    });
+
+    it('counts deletions from storage and database separately', async () => {
+      const repository = new FakeMaintenance();
+      repository.orphaned = [
+        orphanedAsset('asset-1', new Date('2026-08-01T00:00:00Z'), { sizeBytes: 1000 }),
+        orphanedAsset('asset-2', new Date('2026-08-01T00:00:00Z'), { sizeBytes: 2000 }),
+      ];
+      const storage = new FakeStorage();
+
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      expect(report.examined).toBe(2);
+      expect(report.deletedFromStorage).toBe(2);
+      expect(report.deletedFromDatabase).toBe(2);
+      expect(report.storageBytesFreed).toBe(3000);
+      expect(report.failed).toBe(0);
+    });
+
+    it('handles 404 errors by deleting database row without storage confirmation', async () => {
+      const repository = new FakeMaintenance();
+      const asset = orphanedAsset('missing', new Date('2026-08-01T00:00:00Z'), { sizeBytes: 5000 });
+      repository.orphaned = [asset];
+      const storage = new FakeStorage();
+
+      // Mock storage to throw 404 (S3 SDK v3 style)
+      storage.delete = async () => {
+        const error = new Error('The specified key does not exist.');
+        (error as any).name = 'NoSuchKey';
+        throw error;
+      };
+
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      // Should delete database row and count bytes freed
+      expect(repository.hardDeleted).toContain('missing');
+      expect(report.deletedFromDatabase).toBe(1);
+      expect(report.storageBytesFreed).toBe(5000);
+      expect(report.deletedFromStorage).toBe(0);
+    });
+
+    it('does not delete database row on non-404 storage errors', async () => {
+      const repository = new FakeMaintenance();
+      const asset = orphanedAsset('forbidden', new Date('2026-08-01T00:00:00Z'));
+      repository.orphaned = [asset];
+      const storage = new FakeStorage();
+
+      // Mock storage to throw 403
+      storage.delete = async () => {
+        throw new Error('Access Denied');
+      };
+
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      // Should not delete database row
+      expect(repository.hardDeleted).not.toContain('forbidden');
+      expect(report.deletedFromStorage).toBe(0);
+      expect(report.deletedFromDatabase).toBe(0);
+      expect(report.failed).toBe(1);
+    });
+
+    it('continues processing after a failure', async () => {
+      const repository = new FakeMaintenance();
+      repository.orphaned = [
+        orphanedAsset('good-1', new Date('2026-08-01T00:00:00Z')),
+        orphanedAsset('bad', new Date('2026-08-01T00:00:00Z')),
+        orphanedAsset('good-2', new Date('2026-08-01T00:00:00Z')),
+      ];
+      const storage = new FakeStorage();
+
+      storage.delete = async (key: StorageKey) => {
+        if (key.includes('bad')) throw new Error('Temporary network error');
+      };
+
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      expect(repository.hardDeleted).toEqual(['good-1', 'good-2']);
+      expect(report.deletedFromDatabase).toBe(2);
+      expect(report.failed).toBe(1);
+    });
+
+    it('is idempotent when run twice on same set', async () => {
+      const repository = new FakeMaintenance();
+      const assets = [
+        orphanedAsset('idempotent-1', new Date('2026-08-01T00:00:00Z')),
+        orphanedAsset('idempotent-2', new Date('2026-08-01T00:00:00Z')),
+      ];
+      repository.orphaned = assets;
+      const storage = new FakeStorage();
+
+      // First run
+      const report1 = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+      expect(report1.deletedFromDatabase).toBe(2);
+
+      // Second run: no new assets
+      repository.orphaned = [];
+      repository.resetOrphanPagination();
+      const report2 = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+      expect(report2.examined).toBe(0);
+      expect(report2.deletedFromDatabase).toBe(0);
+    });
+
+    it('processes all orphaned media in batches of 100', async () => {
+      const repository = new FakeMaintenance();
+      const assets = Array.from({ length: 250 }, (_, i) =>
+        orphanedAsset(`asset-${i}`, new Date('2026-08-01T00:00:00Z')),
+      );
+      repository.orphaned = assets;
+      const storage = new FakeStorage();
+
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      // Processes all 250, even though they come in batches of 100
+      expect(report.examined).toBe(250);
+      expect(report.deletedFromDatabase).toBe(250);
+    });
+
+    it('reports storage bytes freed accurately', async () => {
+      const repository = new FakeMaintenance();
+      repository.orphaned = [
+        orphanedAsset('big-1', new Date('2026-08-01T00:00:00Z'), { sizeBytes: 5_000_000 }),
+        orphanedAsset('big-2', new Date('2026-08-01T00:00:00Z'), { sizeBytes: 3_000_000 }),
+      ];
+      const storage = new FakeStorage();
+
+      const report = await purgeOrphanedMedia({ repository, storage, clock: fixedClock(NOW) });
+
+      expect(report.storageBytesFreed).toBe(8_000_000);
     });
   });
 });

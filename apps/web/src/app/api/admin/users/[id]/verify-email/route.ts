@@ -15,7 +15,12 @@ import { requireSameOrigin } from '../../../../../../../server/origin.js';
  * provider but EMAIL_NOT_VERIFIED authorization check still blocks publishing.
  * This creates a manual verification path for admin to enable pilot accounts.
  *
- * The action is audited: who verified whom and when.
+ * Design note: This endpoint has NO PILOT_NO_EMAIL guard and stays live in
+ * production. An admin can mark any account verified without proving mailbox
+ * ownership. This is defensible trade-off: (1) gated by adminSession() auth,
+ * (2) fully audited (actorId, timestamp, email recorded), and (3) useful in
+ * production for recovery if email verification fails or to bypass verification
+ * for legacy migrated accounts. The audit trail enables accountability.
  */
 
 export const dynamic = 'force-dynamic';

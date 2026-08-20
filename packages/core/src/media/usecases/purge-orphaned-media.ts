@@ -23,34 +23,66 @@ export async function purgeOrphanedMedia(
   const now = deps.clock.now();
   const olderThan = new Date(now.getTime() - ageThresholdDays * 24 * 60 * 60 * 1000);
 
-  const media = await deps.repository.findOrphanedMedia(olderThan, 100);
-
+  let examined = 0;
   let deletedFromStorage = 0;
+  let deletedFromDatabase = 0;
   let storageBytesFreed = 0;
   let failed = 0;
 
-  for (const asset of media) {
-    try {
-      await deps.storage.delete(asset.storageKey);
-      await deps.repository.hardDelete(asset.id);
-      deletedFromStorage += 1;
-      storageBytesFreed += asset.sizeBytes;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('404')) {
-        await deps.repository.hardDelete(asset.id);
+  // Process in batches to avoid holding too much in memory at once.
+  const batchSize = 100;
+  let hasMore = true;
+
+  while (hasMore) {
+    const batch = await deps.repository.findOrphanedMedia(olderThan, batchSize);
+    if (batch.length === 0) break;
+
+    examined += batch.length;
+
+    for (const asset of batch) {
+      try {
+        await deps.storage.delete(asset.storageKey);
         deletedFromStorage += 1;
+        await deps.repository.hardDelete(asset.id);
+        deletedFromDatabase += 1;
         storageBytesFreed += asset.sizeBytes;
-      } else {
-        failed += 1;
+      } catch (error) {
+        // S3/B2 DeleteObject is idempotent (204 on missing key). If we get
+        // NoSuchKey error, the object is already gone—still delete the row.
+        if (isNotFoundError(error)) {
+          try {
+            await deps.repository.hardDelete(asset.id);
+            deletedFromDatabase += 1;
+            storageBytesFreed += asset.sizeBytes;
+          } catch {
+            failed += 1;
+          }
+        } else {
+          failed += 1;
+        }
       }
     }
+
+    // Stop if we got fewer than requested: there are no more.
+    hasMore = batch.length === batchSize;
   }
 
   return {
-    examined: media.length,
+    examined,
     deletedFromStorage,
-    deletedFromDatabase: deletedFromStorage,
+    deletedFromDatabase,
     storageBytesFreed,
     failed,
   };
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  // AWS SDK v3 S3 error
+  if (error.name === 'NoSuchKey') return true;
+  // B2 or other storage providers may have httpStatusCode in metadata
+  if ('$metadata' in error && typeof error.$metadata === 'object' && error.$metadata !== null) {
+    return (error.$metadata as Record<string, unknown>).httpStatusCode === 404;
+  }
+  return false;
 }
