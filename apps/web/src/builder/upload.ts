@@ -1,3 +1,4 @@
+import { compressBeforeUpload, canCompressInBrowser } from '@zfaf/media-client';
 import { apiGet, apiSend } from '../auth/api.js';
 
 /**
@@ -25,7 +26,7 @@ import { apiGet, apiSend } from '../auth/api.js';
  * upload is not finished until the worker says it is.
  */
 
-export type UploadStage = 'signing' | 'uploading' | 'confirming' | 'processing';
+export type UploadStage = 'compressing' | 'signing' | 'uploading' | 'confirming' | 'processing';
 
 export interface UploadedImage {
   readonly id: string;
@@ -73,48 +74,47 @@ export async function uploadImage(
     readonly invitationId: string;
     readonly purpose: 'cover' | 'couple' | 'gallery' | 'ornament';
     readonly onStage?: (stage: UploadStage) => void;
+    readonly onProgress?: (percent: number) => void;
     readonly signal?: AbortSignal;
   },
 ): Promise<UploadOutcome> {
   const stage = options.onStage ?? (() => {});
+  const progress = options.onProgress ?? (() => {});
+
+  // Compress before signing to avoid signature mismatch
+  stage('compressing');
+  let uploadFile = file;
+  if (canCompressInBrowser()) {
+    const result = await compressBeforeUpload(file);
+    uploadFile = result.file;
+  }
 
   stage('signing');
   const signed = await apiSend<SignedUploadResponse>('/api/v1/media/upload-url', 'POST', {
     invitationId: options.invitationId,
     purpose: options.purpose,
-    filename: file.name,
-    contentType: file.type,
-    sizeBytes: file.size,
+    filename: uploadFile.name,
+    contentType: uploadFile.type,
+    sizeBytes: uploadFile.size,
   });
   if (!signed.ok) return { ok: false, code: signed.error.code };
 
   stage('uploading');
   try {
-    const response = await fetch(signed.data.upload.url, {
-      method: signed.data.upload.method,
-      /**
-       * The signed headers, sent back unchanged.
-       *
-       * `Content-Type` and `Content-Length` are bound into the signature —
-       * without the length bound, a URL issued for a 4 MB photo would accept a
-       * 5 GB object. Rebuilding them here rather than echoing them is how the
-       * two drift and every upload starts failing with an opaque 403.
-       */
-      headers: signed.data.upload.headers,
-      body: file,
-      // No credentials: this request goes to the object store, which
-      // authenticates by signature. Sending our cookie to a third-party
-      // hostname is exactly what we do not want.
-      credentials: 'omit',
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
-
-    console.error('[upload] Response status:', response.status, response.statusText);
-
-    if (!response.ok) {
-      return { ok: false, code: `UPLOAD_REJECTED_${response.status}` };
+    await uploadWithProgress(
+      signed.data.upload.url,
+      signed.data.upload.headers,
+      uploadFile,
+      progress,
+      options.signal,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === 'aborted') {
+      return { ok: false, code: 'CANCELLED' };
     }
-  } catch {
+    if (error instanceof Error && error.message.includes('timeout')) {
+      return { ok: false, code: 'TIMEOUT' };
+    }
     return { ok: false, code: 'NETWORK' };
   }
 
@@ -124,6 +124,71 @@ export async function uploadImage(
 
   stage('processing');
   return pollUntilReady(signed.data.mediaId, options.signal);
+}
+
+async function uploadWithProgress(
+  url: string,
+  headers: Readonly<Record<string, string>>,
+  file: File,
+  progress: (percent: number) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const UPLOAD_TIMEOUT_MS = 3 * 60 * 1000;
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    let isTimeoutAbort = false;
+
+    const cleanup = () => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      signal?.removeEventListener('abort', onAbort);
+    };
+
+    const onAbort = () => {
+      xhr.abort();
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort);
+    }
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        progress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      cleanup();
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`upload failed: ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      cleanup();
+      reject(new Error('network error'));
+    });
+
+    xhr.addEventListener('abort', () => {
+      cleanup();
+      reject(new Error(isTimeoutAbort ? 'timeout' : 'aborted'));
+    });
+
+    xhr.open('PUT', url);
+    Object.entries(headers).forEach(([key, value]) => {
+      xhr.setRequestHeader(key, value);
+    });
+
+    timeoutHandle = setTimeout(() => {
+      isTimeoutAbort = true;
+      xhr.abort();
+    }, UPLOAD_TIMEOUT_MS);
+
+    xhr.send(file);
+  });
 }
 
 async function pollUntilReady(mediaId: string, signal?: AbortSignal): Promise<UploadOutcome> {
