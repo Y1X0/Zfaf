@@ -46,7 +46,8 @@ export function SectionShell({
 export function safeMediaUrl(candidate: string | null): string | null {
   if (!candidate) return null;
   try {
-    return new URL(candidate).protocol === 'https:' ? candidate : null;
+    const proto = new URL(candidate).protocol;
+    return proto === 'https:' || proto === 'data:' ? candidate : null;
   } catch {
     return null;
   }
@@ -87,6 +88,9 @@ export function Picture({
       fetchPriority={priority ? 'high' : 'auto'}
       sizes={sizes}
       className={className ?? 'zf-image'}
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).setAttribute('data-failed', 'true');
+      }}
     />
   );
 }
