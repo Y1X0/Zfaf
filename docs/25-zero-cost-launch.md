@@ -133,11 +133,12 @@ Render المجانية **مستبعَدة بقاعدتك**: تنتهي بعد �
 | **Cloudflare R2** | ١٠ غيغابايت · مليون عملية A · ١٠ ملايين عملية B · **بلا رسوم خروج** | ⚠️ **نعم** — تفعيل R2 يتطلّب وسيلة دفع |
 | **Backblaze B2 (مُوصى به هنا)** | **١٠ غيغابايت دائمًا · بلا بطاقة** · S3-compatible · الخروج مجاني حتى ٣× المخزون | ✅ لا |
 
-**تغيير كود؟ لا.** `STORAGE_DRIVER` يقبل `s3` أصلًا، ومُحوِّل S3 عامّ، وB2 يعنون
-الحاويات بأسلوب المضيف الافتراضي مثل S3 تمامًا فلا يحتاج `forcePathStyle`.
-تتغيّر خمس قيم بيئة: `STORAGE_DRIVER` (`r2` → `s3`) و`STORAGE_REGION` (منطقة B2
-الفعلية مثل `eu-central-003` بدل `auto`) و`STORAGE_PUBLIC_BASE_URL` في
-`zfaf-config`، و`STORAGE_ENDPOINT` ومفتاحا الوصول في `zfaf-secrets`.
+**تغيير كود؟ نعم.** B2 يتطلّب `forcePathStyle: true` لأنّه بخلاف S3، يعنون الحاويات 
+بأسلوب المسار (الحاوية في المسار، لا في النطاق الفرعي). خمس قيم بيئة تتغيّر:
+`STORAGE_DRIVER` (`r2` → `b2`، وإضافة `b2` إلى enum)، `STORAGE_REGION` (منطقة B2 
+الفعلية مثل `us-east-005` بدل `auto`، لأنّ SigV4 scope يشمل المنطقة)، 
+`STORAGE_PUBLIC_BASE_URL` في `zfaf-config`، و`STORAGE_ENDPOINT` ومفتاحا الوصول 
+في `zfaf-secrets`. وإضافة شرط `forcePathStyle` لـ B2 في worker و web containers.
 
 > يبقى شرط CORS على الحاوية إلزاميًا كما هو ([docs/22 §٧-أ](22-deployment-render.md)):
 > الرفع من المتصفّح مباشرةً إلى الحاوية، وبلا سياسة CORS يفشل بلا أثر في أي سجلّ.

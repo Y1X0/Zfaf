@@ -77,7 +77,13 @@ export async function DELETE(
   );
 
   if (!result.ok) {
-    return notFound('Invitation');
+    if (result.code === 'NOT_FOUND') {
+      return notFound('Invitation');
+    }
+    return new Response(JSON.stringify({ code: result.code, message: result.message }), {
+      status: 403,
+      headers: { 'content-type': 'application/json' },
+    });
   }
 
   return ok({ invitationId: id });

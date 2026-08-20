@@ -90,10 +90,6 @@ export async function uploadImage(
 
   stage('uploading');
   try {
-    console.error('[upload] Starting upload to:', signed.data.upload.url);
-    console.error('[upload] Headers:', signed.data.upload.headers);
-    console.error('[upload] File size:', file.size, 'bytes');
-
     const response = await fetch(signed.data.upload.url, {
       method: signed.data.upload.method,
       /**
@@ -116,22 +112,9 @@ export async function uploadImage(
     console.error('[upload] Response status:', response.status, response.statusText);
 
     if (!response.ok) {
-      const errorBody = await response.text().catch(() => '(unable to read error body)');
-      console.error('[upload] Upload failed:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorBody: errorBody.substring(0, 500),
-      });
       return { ok: false, code: `UPLOAD_REJECTED_${response.status}` };
     }
-
-    console.error('[upload] Upload succeeded');
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('[upload] Network error:', {
-      error: errorMessage,
-      type: err instanceof TypeError ? 'TypeError' : typeof err,
-    });
+  } catch {
     return { ok: false, code: 'NETWORK' };
   }
 

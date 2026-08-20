@@ -62,6 +62,16 @@
   background: transparent;
 }
 
+.zfd-btn--danger {
+  color: #a3342a;
+  border-color: #a3342a;
+}
+
+.zfd-btn--danger:hover {
+  background: #a3342a;
+  color: #fff;
+}
+
 /* Four across on a phone: the numbers are short and the couple wants them
    at a glance, not stacked down a scroll. */
 .zfd-stats {
@@ -187,6 +197,12 @@
   min-block-size: var(--zfd-tap);
   display: inline-flex;
   align-items: center;
+}
+
+.zfd-row__error {
+  color: #a3342a;
+  font-size: 0.9rem;
+  margin: 0;
 }
 
 .zfd-empty {
