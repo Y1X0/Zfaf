@@ -530,6 +530,46 @@ function reportView(root: Document): Cleanup {
   return () => {};
 }
 
+// ── debug display ───────────────────────────────────────────────────────────
+
+function wireDebugDisplay(root: Document): Cleanup {
+  const params = new URL(root.location.href).searchParams;
+  if (!params.has('debug')) return () => {};
+
+  const debugBox = document.createElement('div');
+  debugBox.style.cssText = `
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #0f0;
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 11px;
+    z-index: 9999;
+    pointer-events: none;
+    white-space: nowrap;
+  `;
+
+  const observer = new MutationObserver(() => {
+    const value = root.documentElement.getAttribute('data-auto-scroll');
+    debugBox.textContent = `auto-scroll: ${value || 'waiting'}`;
+  });
+
+  observer.observe(root.documentElement, { attributes: true, attributeFilter: ['data-auto-scroll'] });
+  document.body.appendChild(debugBox);
+
+  // Set initial value
+  const value = root.documentElement.getAttribute('data-auto-scroll');
+  debugBox.textContent = `auto-scroll: ${value || 'waiting'}`;
+
+  return () => {
+    observer.disconnect();
+    debugBox.remove();
+  };
+}
+
 export function enhanceInvitation(root: Document = document): Cleanup {
   const skew = measureSkew(root);
   const cleanups = [
@@ -540,6 +580,7 @@ export function enhanceInvitation(root: Document = document): Cleanup {
     wireRsvp(root),
     wireAutoScroll(root),
     wireReveal(root),
+    wireDebugDisplay(root),
     reportView(root),
   ];
   // Marks the page as enhanced, which is what the end-to-end tests wait on
