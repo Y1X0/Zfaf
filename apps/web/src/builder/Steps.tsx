@@ -641,8 +641,12 @@ function UploadButton({
       'QUARANTINED',
       'STILL_PROCESSING',
       'NETWORK',
+      'CANCELLED',
+      'PROCESSING_FAILED',
     ];
-    setError(known.includes(outcome.code) ? outcome.code : 'UNKNOWN');
+    const isUploadRejected = outcome.code.startsWith('UPLOAD_REJECTED_');
+    const code = known.includes(outcome.code) || isUploadRejected ? outcome.code : 'UNKNOWN';
+    setError(code);
   };
 
   return (

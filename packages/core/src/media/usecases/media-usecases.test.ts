@@ -249,7 +249,10 @@ describe('requesting an upload URL', () => {
     if (!result.ok) return;
 
     expect(storage.lastUpload?.contentType).toBe('image/heic');
-    expect(storage.lastUpload?.maxSizeBytes).toBe(8 * 1024 * 1024);
+    // Signed to the declared file size, not the plan limit. The browser will send
+    // the actual size in Content-Length (forbidden header, calculated by fetch),
+    // and it must match the signature (docs/25 §1).
+    expect(storage.lastUpload?.maxSizeBytes).toBe(3_000_000);
     expect(storage.lastUpload?.expiresInSeconds).toBe(900);
     expect(result.upload.method).toBe('PUT');
   });

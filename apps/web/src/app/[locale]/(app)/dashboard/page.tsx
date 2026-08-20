@@ -99,54 +99,52 @@ export default async function DashboardPage({
 
       <IslandMessages namespaces={['dashboard', 'common']}>
         <NewInvitation templates={templates} defaultLocale={locale} />
-      </IslandMessages>
 
-      {invitations.length === 0 ? (
-        <p className="zfd-empty" data-testid="dashboard-empty">
-          {t('empty')}
-        </p>
-      ) : (
-        <ul className="zfd-list" data-testid="invitation-list">
-          {invitations.map((invitation) => (
-            <li className="zfd-row" key={invitation.id} data-testid="invitation-row">
-              <div className="zfd-row__main">
-                <span className="zfd-row__name">{invitation.title}</span>
-                <span className="zfd-tag" data-status={invitation.status}>
-                  {t(`status.${invitation.status}`)}
-                </span>
-              </div>
+        {invitations.length === 0 ? (
+          <p className="zfd-empty" data-testid="dashboard-empty">
+            {t('empty')}
+          </p>
+        ) : (
+          <ul className="zfd-list" data-testid="invitation-list">
+            {invitations.map((invitation) => (
+              <li className="zfd-row" key={invitation.id} data-testid="invitation-row">
+                <div className="zfd-row__main">
+                  <span className="zfd-row__name">{invitation.title}</span>
+                  <span className="zfd-tag" data-status={invitation.status}>
+                    {t(`status.${invitation.status}`)}
+                  </span>
+                </div>
 
-              <p className="zfd-row__meta">{invitation.eventDate}</p>
+                <p className="zfd-row__meta">{invitation.eventDate}</p>
 
-              <div className="zfd-filters">
-                <a
-                  className="zfd-btn"
-                  href={`/builder/${invitation.id}`}
-                  data-testid="open-builder"
-                >
-                  {t('open')}
-                </a>
-                <a
-                  className="zfd-btn zfd-btn--quiet"
-                  href={localePath(locale, `/dashboard/invitations/${invitation.id}/rsvps`)}
-                >
-                  {t('replies')}
-                </a>
-                {/* Only once there is something to look at. A link to a page
-                    that says "not published yet" is a wasted tap. */}
-                {invitation.slug && invitation.status === 'PUBLISHED' ? (
-                  <a className="zfd-btn zfd-btn--quiet" href={`/i/${invitation.slug}`}>
-                    {t('view')}
+                <div className="zfd-filters">
+                  <a
+                    className="zfd-btn"
+                    href={`/builder/${invitation.id}`}
+                    data-testid="open-builder"
+                  >
+                    {t('open')}
                   </a>
-                ) : null}
-                <IslandMessages namespaces={['dashboard']}>
+                  <a
+                    className="zfd-btn zfd-btn--quiet"
+                    href={localePath(locale, `/dashboard/invitations/${invitation.id}/rsvps`)}
+                  >
+                    {t('replies')}
+                  </a>
+                  {/* Only once there is something to look at. A link to a page
+                      that says "not published yet" is a wasted tap. */}
+                  {invitation.slug && invitation.status === 'PUBLISHED' ? (
+                    <a className="zfd-btn zfd-btn--quiet" href={`/i/${invitation.slug}`}>
+                      {t('view')}
+                    </a>
+                  ) : null}
                   <DeleteInvitationButton invitationId={invitation.id} />
-                </IslandMessages>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </IslandMessages>
     </div>
   );
 }

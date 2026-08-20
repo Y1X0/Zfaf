@@ -245,8 +245,13 @@
           "GALLERY_LIMIT_REACHED": "You have reached the number of gallery photos your plan allows.",
           "STORAGE_QUOTA_EXCEEDED": "Your plan's storage will not fit this photo. Delete an older one first.",
           "QUARANTINED": "We could not process that file, so it was not added. Try a different photo.",
+          "PROCESSING_FAILED": "Processing the photo failed. Try a different one.",
+          "CANCELLED": "Upload was cancelled. Try again.",
           "STILL_PROCESSING": "Processing is taking longer than usual. Refresh the page in a moment.",
           "NETWORK": "The connection dropped during the upload. Please try again.",
+          "UPLOAD_REJECTED_403": "The upload was rejected by the server. Try again in a moment.",
+          "UPLOAD_REJECTED_404": "The upload service is unavailable. Try again in a moment.",
+          "UPLOAD_REJECTED_413": "The file is too large. Choose a smaller photo.",
           "UNKNOWN": "The photo could not be uploaded. Please try again."
         }
       }
