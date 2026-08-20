@@ -363,9 +363,8 @@ function wireAutoScroll(root: Document): Cleanup {
     started = true;
 
     const rsvpForm = root.querySelector<HTMLFormElement>('[data-rsvp-form]');
-    const maxScroll = root.documentElement.scrollHeight - window.innerHeight;
     const startTime = performance.now();
-    const duration = 10000; // 10 seconds to scroll the full height
+    const scrollSpeed = 70; // pixels per second
 
     const scroll = (now: number): void => {
       if (cancelled) return;
@@ -376,14 +375,15 @@ function wireAutoScroll(root: Document): Cleanup {
         return;
       }
 
-      const elapsed = Math.min(now - startTime, duration);
-      const progress = elapsed / duration;
-      const target = Math.ceil(maxScroll * progress);
+      // Recompute scroll bounds each frame (images load lazily)
+      const maxScroll = root.documentElement.scrollHeight - window.innerHeight;
+      const elapsed = (now - startTime) / 1000; // milliseconds to seconds
+      const target = Math.ceil(Math.min(elapsed * scrollSpeed, maxScroll));
 
       window.scrollTo(0, target);
 
       // Stop if we've reached the bottom
-      if (progress < 1 && !cancelled) {
+      if (target < maxScroll && !cancelled) {
         requestAnimationFrame(scroll);
       }
     };
@@ -391,12 +391,11 @@ function wireAutoScroll(root: Document): Cleanup {
     requestAnimationFrame(scroll);
   };
 
-  // Start after ~2 seconds
-  let delayFrames = 0;
-  const delayLoop = (): void => {
-    delayFrames += 1;
-    // ~120 frames at 60fps = ~2 seconds
-    if (delayFrames >= 120) {
+  // Start after ~2 seconds using performance.now() for device-independent timing
+  const delayStart = performance.now();
+  const delayLoop = (now: number): void => {
+    const elapsed = (now - delayStart) / 1000; // milliseconds to seconds
+    if (elapsed >= 2) {
       startScroll();
     } else if (!cancelled) {
       requestAnimationFrame(delayLoop);
