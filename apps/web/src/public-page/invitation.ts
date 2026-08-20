@@ -349,18 +349,33 @@ function messageFor(code: string, arabic: boolean): string {
  * motion is worse than any fade (ADR-0010).
  */
 function wireAutoScroll(root: Document): Cleanup {
-  if (reducedMotion()) return () => {};
+  if (reducedMotion()) {
+    root.documentElement.setAttribute('data-auto-scroll', 'skipped-reduced-motion');
+    return () => {};
+  }
 
   let cancelled = false;
   let started = false;
 
-  const cancel = (): void => {
+  const cancel = (reason: string): void => {
+    if (!cancelled) {
+      root.documentElement.setAttribute('data-auto-scroll', `cancelled-${reason}`);
+    }
     cancelled = true;
   };
 
   const startScroll = (): void => {
     if (cancelled || started) return;
+
+    // Check if there's room to scroll
+    const maxScroll = root.documentElement.scrollHeight - window.innerHeight;
+    if (maxScroll <= 0) {
+      root.documentElement.setAttribute('data-auto-scroll', 'no-scroll-room');
+      return;
+    }
+
     started = true;
+    root.documentElement.setAttribute('data-auto-scroll', 'started');
 
     const rsvpForm = root.querySelector<HTMLFormElement>('[data-rsvp-form]');
     const startTime = performance.now();
@@ -371,19 +386,19 @@ function wireAutoScroll(root: Document): Cleanup {
 
       // Check if RSVP form has focus
       if (rsvpForm && root.activeElement?.closest('[data-rsvp-form]')) {
-        cancel();
+        cancel('rsvp-focus');
         return;
       }
 
       // Recompute scroll bounds each frame (images load lazily)
-      const maxScroll = root.documentElement.scrollHeight - window.innerHeight;
+      const currentMaxScroll = root.documentElement.scrollHeight - window.innerHeight;
       const elapsed = (now - startTime) / 1000; // milliseconds to seconds
-      const target = Math.ceil(Math.min(elapsed * scrollSpeed, maxScroll));
+      const target = Math.ceil(Math.min(elapsed * scrollSpeed, currentMaxScroll));
 
       window.scrollTo(0, target);
 
       // Stop if we've reached the bottom
-      if (target < maxScroll && !cancelled) {
+      if (target < currentMaxScroll && !cancelled) {
         requestAnimationFrame(scroll);
       }
     };
@@ -402,9 +417,9 @@ function wireAutoScroll(root: Document): Cleanup {
     }
   };
 
-  const onInput = (): void => cancel();
+  const onInput = (event: Event): void => cancel(event.type);
   const onVisibilityChange = (): void => {
-    if (root.hidden) cancel();
+    if (root.hidden) cancel('visibility');
   };
 
   // Start the delay loop
@@ -418,7 +433,7 @@ function wireAutoScroll(root: Document): Cleanup {
   root.addEventListener('visibilitychange', onVisibilityChange);
 
   return () => {
-    cancel();
+    if (!cancelled) cancel('cleanup');
     root.removeEventListener('touchstart', onInput);
     root.removeEventListener('wheel', onInput);
     root.removeEventListener('keydown', onInput);
