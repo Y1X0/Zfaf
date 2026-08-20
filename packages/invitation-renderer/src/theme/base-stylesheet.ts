@@ -23,7 +23,6 @@
 export const BASE_STYLESHEET = `
 .zf-invitation{background:var(--zf-color-bg);color:var(--zf-color-text);font-family:var(--zf-font-body);font-size:var(--zf-font-size-body);line-height:var(--zf-line-height);margin:0}
 .zf-section{padding-block:var(--zf-space-section);padding-inline:clamp(1rem,5vw,3rem);position:relative}
-.zf-section:empty{display:none}
 .zf-section__inner{margin-inline:auto;max-width:56rem;text-align:center}
 .zf-image{max-width:100%;height:auto;display:block}
 .zf-divider{block-size:1px;inline-size:min(12rem,60%);margin-block:1.5rem;margin-inline:auto;background:var(--zf-color-accent)}
