@@ -39,6 +39,34 @@
     U+2000-206F, U+2190-21FF, U+2500-25FF;
 }
 
+/* Arabic + Latin subsets of Aref Ruqaa and Amiri (SIL OFL 1.1).
+   Self-hosted deliberately: the public invitation page CSP forbids an
+   external stylesheet, so a Google Fonts <link> would be blocked. */
+
+@font-face {
+  font-family: 'Aref Ruqaa';
+  src: url('/fonts/aref-ruqaa-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Amiri';
+  src: url('/fonts/amiri-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Amiri';
+  src: url('/fonts/amiri-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --zf-bg: #faf7f2;
   --zf-surface: #ffffff;
