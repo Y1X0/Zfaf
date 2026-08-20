@@ -129,10 +129,14 @@ export async function requestUploadUrl(
 
   const upload = await deps.storage.createUploadUrl({
     key: storageKey,
-    // Both are bound into the signature. Without the size bound a URL issued
-    // for a 4 MB photo accepts a 5 GB object (docs/10 §4 ①).
+    // Bound to the *declared* size, not the plan limit. The declared size was
+    // validated against the limit above. Signing the plan limit causes a
+    // signature mismatch when the browser sends the actual file: Content-Length
+    // is a forbidden header so fetch uses the real size, but the signature was
+    // computed with the plan limit. S3-compatible backends reject the result
+    // as SignatureDoesNotMatch (docs/10 §4 ②, ADR-0007 amendment).
     contentType: input.contentType,
-    maxSizeBytes: policy.maxSizeBytes,
+    maxSizeBytes: input.declaredSizeBytes,
     expiresInSeconds: UPLOAD_URL_TTL_SECONDS,
   });
 
@@ -145,7 +149,7 @@ export async function requestUploadUrl(
     originalFilename: sanitiseOriginalFilename(input.filename),
     declaredMimeType: input.contentType,
     declaredSizeBytes: input.declaredSizeBytes,
-    signedMaxBytes: policy.maxSizeBytes,
+    signedMaxBytes: input.declaredSizeBytes,
   });
 
   return { ok: true, mediaId, storageKey, upload };

@@ -54,8 +54,8 @@ function buildStorage(env: Env) {
     bucket: env.STORAGE_BUCKET_MEDIA,
     accessKeyId: env.STORAGE_ACCESS_KEY_ID,
     secretAccessKey: env.STORAGE_SECRET_ACCESS_KEY,
-    // MinIO addresses buckets by path; R2 and S3 by virtual host.
-    forcePathStyle: env.STORAGE_DRIVER === 'minio',
+    // MinIO and Backblaze B2 address buckets by path; R2 and S3 by virtual host.
+    forcePathStyle: env.STORAGE_DRIVER === 'minio' || env.STORAGE_DRIVER === 'b2',
   });
 }
 

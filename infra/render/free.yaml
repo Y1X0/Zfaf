@@ -99,13 +99,14 @@ envVarGroups:
         value: https://zfaf.app
       - key: DEFAULT_MARKET
         value: SA
-      # `s3`, not `r2`: the same adapter serves any S3-compatible bucket, and
-      # Backblaze B2 needs no card while enabling R2 does (docs/25 §3.5).
-      # ADR-0007 is unaffected — this is exactly what the abstraction is for.
+      # `b2`: Backblaze B2 needs path-style bucket addressing, not virtual-host.
+      # The region must be the actual B2 region (not `auto`), since SigV4 scope
+      # includes it: mismatch causes SignatureDoesNotMatch on every upload.
+      # docs/27 §3.
       - key: STORAGE_DRIVER
-        value: s3
+        value: b2
       - key: STORAGE_REGION
-        value: auto
+        value: us-east-005
       - key: STORAGE_BUCKET_MEDIA
         value: zfaf-media
       - key: STORAGE_PUBLIC_BASE_URL
