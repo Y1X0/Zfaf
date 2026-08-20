@@ -364,7 +364,7 @@ function wireAutoScroll(root: Document): Cleanup {
 
     const rsvpForm = root.querySelector<HTMLFormElement>('[data-rsvp-form]');
     const startTime = performance.now();
-    const scrollSpeed = 70; // pixels per second
+    const scrollSpeed = 95; // pixels per second (~32s for typical 3000px invitation)
 
     const scroll = (now: number): void => {
       if (cancelled) return;
