@@ -1,6 +1,11 @@
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 import { defineConfig, devices } from '@playwright/test';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * End-to-end configuration (M5 acceptance).
@@ -78,7 +83,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: process.env['CI'] ? [['list'], ['github']] : [['list']],
-  globalSetup: require.resolve('./e2e/global-setup.ts'),
+  globalSetup: resolve(__dirname, './e2e/global-setup.ts'),
 
   use: {
     baseURL,
