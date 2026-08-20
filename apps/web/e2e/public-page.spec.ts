@@ -183,6 +183,33 @@ test.describe('a published invitation', () => {
     );
     expect(overflow).toBeLessThanOrEqual(1);
   });
+
+  test('auto-scroll cancels immediately on touchstart', async ({ page }) => {
+    await page.goto(`/i/${seeded.slug}`);
+    await expect(page.locator('html')).toHaveAttribute('data-enhanced', '');
+
+    // Record the initial scroll position
+    const initialScroll = await page.evaluate(() => window.scrollY);
+    expect(initialScroll).toBe(0);
+
+    // Wait briefly for auto-scroll to start (past the 2s delay)
+    await page.waitForTimeout(2500);
+
+    // Record scroll position after waiting — auto-scroll should have started
+    const scrollAfterDelay = await page.evaluate(() => window.scrollY);
+
+    // Send touchstart to cancel auto-scroll
+    await page.evaluate(() => {
+      document.dispatchEvent(new TouchEvent('touchstart'));
+    });
+
+    // Wait a bit more and verify scroll didn't continue
+    await page.waitForTimeout(1000);
+    const scrollAfterTouchstart = await page.evaluate(() => window.scrollY);
+
+    // Touchstart should have cancelled the scroll; position should not advance further
+    expect(scrollAfterTouchstart).toBeLessThanOrEqual(scrollAfterDelay + 5); // Small tolerance for variance
+  });
 });
 
 // ── the security matrix ─────────────────────────────────────────────────────

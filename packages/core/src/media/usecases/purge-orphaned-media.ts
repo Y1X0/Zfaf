@@ -95,7 +95,7 @@ function isNotFoundError(error: unknown): boolean {
   if (error.name === 'NoSuchKey') return true;
   // B2 or other storage providers may have httpStatusCode in metadata
   if ('$metadata' in error && typeof error.$metadata === 'object' && error.$metadata !== null) {
-    return (error.$metadata as Record<string, unknown>).httpStatusCode === 404;
+    return (error.$metadata as Record<string, unknown>)['httpStatusCode'] === 404;
   }
   return false;
 }

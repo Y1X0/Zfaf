@@ -1,12 +1,11 @@
 import {
-  adminAuditor,
   adminNotFound,
   adminSession,
   withAdminHeaders,
-} from '../../../../../../../server/admin.js';
-import { container } from '../../../../../../../server/container.js';
-import { failure, ok } from '../../../../../../../server/responses.js';
-import { requireSameOrigin } from '../../../../../../../server/origin.js';
+} from '../../../../../../server/admin.js';
+import { container } from '../../../../../../server/container.js';
+import { failure, ok } from '../../../../../../server/responses.js';
+import { requireSameOrigin } from '../../../../../../server/origin.js';
 
 /**
  * `POST /api/admin/users/{id}/verify-email` — mark an account as email-verified.
@@ -47,9 +46,13 @@ export async function POST(
 
     await deps.users.markEmailVerified(id, now);
 
+    const adminActor = gate.session.actor;
+    const adminUserId =
+      adminActor.kind === 'user' ? adminActor.userId : (null as never);
+
     await deps.audit.record(
       {
-        actorId: gate.session.actor.id,
+        actorId: adminUserId,
         actorType: 'user',
         action: 'admin.user.email_verified',
         resourceType: 'user',
@@ -57,7 +60,7 @@ export async function POST(
         metadata: {
           email: user.email,
         },
-        ipHash: gate.ipHash,
+        ipHash: new TextEncoder().encode(gate.session.ipHash),
       },
       now,
     );

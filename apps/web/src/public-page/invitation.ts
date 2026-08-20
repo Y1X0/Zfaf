@@ -338,6 +338,96 @@ function messageFor(code: string, arabic: boolean): string {
   }
 }
 
+// ── auto-scroll ────────────────────────────────────────────────────────────
+
+/**
+ * The page scrolls itself from top to bottom on load, playing the invitation
+ * like a short film. The guest takes over permanently on first input.
+ *
+ * Skipped entirely when reduced motion is requested — this is not slowed,
+ * it is skipped. Moving the viewport under someone who asked for reduced
+ * motion is worse than any fade (ADR-0010).
+ */
+function wireAutoScroll(root: Document): Cleanup {
+  if (reducedMotion()) return () => {};
+
+  let cancelled = false;
+  let started = false;
+
+  const cancel = (): void => {
+    cancelled = true;
+  };
+
+  const startScroll = (): void => {
+    if (cancelled || started) return;
+    started = true;
+
+    const rsvpForm = root.querySelector<HTMLFormElement>('[data-rsvp-form]');
+    const maxScroll = root.documentElement.scrollHeight - window.innerHeight;
+    const startTime = performance.now();
+    const duration = 10000; // 10 seconds to scroll the full height
+
+    const scroll = (now: number): void => {
+      if (cancelled) return;
+
+      // Check if RSVP form has focus
+      if (rsvpForm && root.activeElement?.closest('[data-rsvp-form]')) {
+        cancel();
+        return;
+      }
+
+      const elapsed = Math.min(now - startTime, duration);
+      const progress = elapsed / duration;
+      const target = Math.ceil(maxScroll * progress);
+
+      window.scrollTo(0, target);
+
+      // Stop if we've reached the bottom
+      if (progress < 1 && !cancelled) {
+        requestAnimationFrame(scroll);
+      }
+    };
+
+    requestAnimationFrame(scroll);
+  };
+
+  // Start after ~2 seconds
+  let delayFrames = 0;
+  const delayLoop = (): void => {
+    delayFrames += 1;
+    // ~120 frames at 60fps = ~2 seconds
+    if (delayFrames >= 120) {
+      startScroll();
+    } else if (!cancelled) {
+      requestAnimationFrame(delayLoop);
+    }
+  };
+
+  const onInput = (): void => cancel();
+  const onVisibilityChange = (): void => {
+    if (root.hidden) cancel();
+  };
+
+  // Start the delay loop
+  requestAnimationFrame(delayLoop);
+
+  // Cancel on user input
+  root.addEventListener('touchstart', onInput, { passive: true });
+  root.addEventListener('wheel', onInput, { passive: true });
+  root.addEventListener('keydown', onInput);
+  root.addEventListener('pointerdown', onInput, { passive: true });
+  root.addEventListener('visibilitychange', onVisibilityChange);
+
+  return () => {
+    cancel();
+    root.removeEventListener('touchstart', onInput);
+    root.removeEventListener('wheel', onInput);
+    root.removeEventListener('keydown', onInput);
+    root.removeEventListener('pointerdown', onInput);
+    root.removeEventListener('visibilitychange', onVisibilityChange);
+  };
+}
+
 // ── scroll reveal ───────────────────────────────────────────────────────────
 
 /**
@@ -434,6 +524,7 @@ export function enhanceInvitation(root: Document = document): Cleanup {
     wireGallery(root),
     wireShare(root),
     wireRsvp(root),
+    wireAutoScroll(root),
     wireReveal(root),
     reportView(root),
   ];
