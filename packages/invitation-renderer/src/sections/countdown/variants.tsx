@@ -63,6 +63,7 @@ function Shell({
         data-countdown-timezone={content.wedding.timezone}
         role="timer"
         aria-live="off"
+        style={{ direction: 'ltr' }}
       >
         {units(props).map((unit) => (
           <div className="zf-countdown__unit" key={unit}>
