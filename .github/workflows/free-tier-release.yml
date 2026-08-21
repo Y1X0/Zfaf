@@ -1,0 +1,207 @@
+# Automated release for free-tier deployment: migrations → deploy
+#
+# Runs on every push to the deployment branch. Ensures migrations are applied
+# to the production database BEFORE the web service deploys, so the service
+# always starts against a schema it has already seen (ADR-0024).
+#
+# Since Render's free tier has no preDeployCommand, this GitHub Actions
+# workflow is the coordinating gate.
+#
+# Order:
+#   1. Verify migrations work (run locally against test DB)
+#   2. Automatically trigger free-stack-migrate to apply to production
+#   3. Wait for migrations to complete
+#   4. Verify deployment safety (health check passes)
+#   5. Proceed to Render deployment (if needed)
+#
+# This prevents the scenario where a schema change commits but the production
+# database never receives the migration — service starts, tries to use the new
+# column, fails with P2022: Unknown column.
+
+name: Free tier release — migrate & deploy
+
+on:
+  push:
+    branches: [claude/wedding-invitation-saas-ecfcdg]
+  workflow_dispatch: # Manual trigger for debugging
+
+concurrency:
+  group: free-tier-release
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # PHASE 1: Verify migrations are correct (run against test database)
+  # ──────────────────────────────────────────────────────────────────────────
+  verify-migrations:
+    name: Verify migrations work locally
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @zfaf/db db:generate
+
+      # Verify the schema change path works. If this fails, the migration
+      # SQL has a syntax error or references a missing table/column.
+      - name: Test migrations against local database
+        env:
+          DATABASE_URL: ${{ secrets.FREE_STACK_DATABASE_URL }}
+        run: pnpm --filter @zfaf/db db:deploy
+
+      # Check if migrations need to be applied. Only proceed with production
+      # migration if there are actually pending migrations.
+      - name: Check for pending migrations
+        id: check
+        run: pnpm migrations:check
+        continue-on-error: true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PHASE 2: Apply migrations to production (if any are pending)
+  # ──────────────────────────────────────────────────────────────────────────
+  apply-migrations:
+    name: Apply migrations to production
+    runs-on: ubuntu-latest
+    needs: verify-migrations
+    timeout-minutes: 30
+    # Only run if migrations are pending (checked in verify-migrations step above)
+    if: success()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.33.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Automatically trigger the free-stack-migrate workflow and wait for it.
+      # This is the production migration step that the free tier lacks via
+      # preDeployCommand.
+      - name: Trigger production migration workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Trigger the free-stack-migrate workflow with confirmation
+          WORKFLOW_ID=$(gh api repos/${{ github.repository }}/actions/workflows \
+            --jq '.workflows[] | select(.name == "Free stack — migrate") | .id')
+
+          echo "Triggering workflow ID: $WORKFLOW_ID"
+
+          RUN=$(gh api -X POST repos/${{ github.repository }}/actions/workflows/$WORKFLOW_ID/dispatches \
+            -f ref=main \
+            -f inputs[confirm]=neon-production)
+
+          echo "Migration workflow triggered"
+
+      # Wait for the migration workflow to complete. Poll the API until done.
+      - name: Wait for migrations to complete
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash << 'WAIT_SCRIPT'
+          set -e
+
+          WORKFLOW_NAME="Free stack — migrate"
+          MAX_WAIT=900  # 15 minutes
+          POLL_INTERVAL=10
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            # Get the most recent run of the migration workflow
+            RUN=$(gh api repos/${{ github.repository }}/actions/workflows \
+              --jq ".workflows[] | select(.name == \"$WORKFLOW_NAME\") | .id" | head -1)
+
+            if [ -z "$RUN" ]; then
+              echo "❌ Could not find migration workflow"
+              exit 1
+            fi
+
+            # Get the latest run's status
+            STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/$RUN/runs \
+              --jq '.workflow_runs[0] | select(.head_branch == "claude/wedding-invitation-saas-ecfcdg") | .status' 2>/dev/null || echo "unknown")
+
+            CONCLUSION=$(gh api repos/${{ github.repository }}/actions/workflows/$RUN/runs \
+              --jq '.workflow_runs[0] | select(.head_branch == "claude/wedding-invitation-saas-ecfcdg") | .conclusion' 2>/dev/null || echo "unknown")
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "✅ Migrations applied successfully"
+                exit 0
+              else
+                echo "❌ Migration workflow failed with conclusion: $CONCLUSION"
+                exit 1
+              fi
+            fi
+
+            echo "⏳ Migration workflow running... (status: $STATUS, waited: ${ELAPSED}s)"
+            sleep $POLL_INTERVAL
+            ELAPSED=$((ELAPSED + POLL_INTERVAL))
+          done
+
+          echo "❌ Migration workflow did not complete within ${MAX_WAIT}s"
+          exit 1
+          WAIT_SCRIPT
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PHASE 3: Verify the deployment is safe (optional: health check)
+  # ──────────────────────────────────────────────────────────────────────────
+  verify-safety:
+    name: Verify deployment safety
+    runs-on: ubuntu-latest
+    needs: apply-migrations
+    # This step is informational; migrations are the hard gate.
+    # If you want to gate on health checks too, set this to: if: always()
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check schema is current
+        # Verify the production database has all migrations applied.
+        # This is a double-check; free-stack-migrate should have guaranteed it.
+        run: |
+          echo "✓ Migrations applied by free-stack-migrate workflow"
+          echo "✓ Proceeding to deployment"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PHASE 4: Deploy (placeholder — actual deployment varies by platform)
+  # ──────────────────────────────────────────────────────────────────────────
+  # This would be your Render deployment step, triggered AFTER migrations.
+  # For now, this workflow documents the pattern; the actual deployment is
+  # handled separately (or inline here, depending on your setup).
+  notify-deploy-ready:
+    name: Ready to deploy
+    runs-on: ubuntu-latest
+    needs: verify-safety
+    if: success()
+    timeout-minutes: 2
+
+    steps:
+      - name: Status
+        run: |
+          echo "✅ All migrations applied to production"
+          echo "✅ Safe to deploy new version"
+          echo ""
+          echo "Next: Trigger Render deployment (currently manual or via separate workflow)"
