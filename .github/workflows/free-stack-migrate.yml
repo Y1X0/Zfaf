@@ -46,6 +46,45 @@ jobs:
           node-version: '22'
           cache: pnpm
 
+      - name: Verify DATABASE_URL is configured
+        env:
+          DATABASE_URL: ${{ secrets.FREE_STACK_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "❌ FATAL: FREE_STACK_DATABASE_URL secret is not set"
+            echo ""
+            echo "This secret must be configured at repository level:"
+            echo "  GitHub → Settings → Secrets and variables → Actions"
+            echo "  → New repository secret"
+            echo "  → Name: FREE_STACK_DATABASE_URL"
+            echo "  → Value: postgresql://... (Neon pooled connection string)"
+            echo ""
+            echo "Get the connection string from:"
+            echo "  Neon Dashboard → Connection Details → Pooled connection"
+            echo ""
+            echo "The pooled connection is required because Render free tier"
+            echo "exhausts direct connections quickly."
+            exit 1
+          fi
+
+          if ! echo "$DATABASE_URL" | grep -qE '^postgresql://'; then
+            echo "❌ FATAL: DATABASE_URL does not start with postgresql://"
+            echo ""
+            echo "Value received (first 50 chars): ${DATABASE_URL:0:50}..."
+            echo ""
+            echo "This usually means:"
+            echo "  • The secret is stored at environment-level, not repo-level"
+            echo "  • The secret value is malformed or corrupted"
+            echo ""
+            echo "Solution:"
+            echo "  1. Go to Settings → Secrets and variables → Actions"
+            echo "  2. Delete any existing FREE_STACK_DATABASE_URL from ALL scopes"
+            echo "  3. Create NEW repository-level secret with pooled connection"
+            exit 1
+          fi
+
+          echo "✅ DATABASE_URL is configured and valid"
+
       - name: Record what is being applied, and where it is not
         run: |
           git rev-parse HEAD
