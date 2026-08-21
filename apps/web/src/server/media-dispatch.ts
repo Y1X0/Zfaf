@@ -57,7 +57,16 @@ async function processor(): Promise<typeof MediaProcessing> {
  */
 async function processInline(mediaId: string): Promise<void> {
   const deps = container();
+  const logger = deps.logger;
+  const startTime = performance.now();
+
+  logger.debug('media.inline.start', { mediaId });
+
   const { processMediaJob, SharpImageProcessor } = await processor();
+  logger.debug('media.inline.processor_loaded', {
+    mediaId,
+    elapsedMs: Math.round(performance.now() - startTime),
+  });
 
   try {
     const outcome = await processMediaJob(
@@ -71,14 +80,24 @@ async function processInline(mediaId: string): Promise<void> {
         scanner: NO_OP_SCANNER,
       },
     );
+
+    logger.info('media.inline.complete', {
+      mediaId,
+      result: outcome.result,
+      detail: outcome.detail ?? null,
+      elapsedMs: Math.round(performance.now() - startTime),
+    });
+
     if (outcome.result === 'quarantined') {
-      deps.logger.warn('media.quarantined', { mediaId, detail: outcome.detail ?? '' });
+      logger.warn('media.quarantined', { mediaId, detail: outcome.detail ?? '' });
     }
   } catch (error) {
     // Transient. The row is still `processing` and the redrive will return.
-    deps.logger.error('media.inline_failed', {
+    const durationMs = Math.round(performance.now() - startTime);
+    logger.error('media.inline_failed', {
       mediaId,
       error: error instanceof Error ? error.message : String(error),
+      elapsedMs: durationMs,
     });
     deps.errors.capture({ error, event: 'media.inline_failed', fields: { mediaId } });
   }

@@ -12,6 +12,10 @@ import {
   unauthorized,
 } from '../../../../../../server/responses.js';
 
+function now(): number {
+  return performance.now();
+}
+
 /**
  * Stage ③ of the upload (D4.2, docs/10 §4).
  *
@@ -34,6 +38,9 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  const startTime = now();
+  const logger = container().logger;
+
   // Layer 2 of the CSRF defence (docs/09 §5). `SameSite=Lax` is layer 1.
   const crossSite = requireSameOrigin(request);
   if (crossSite) return crossSite;
@@ -45,6 +52,8 @@ export async function POST(
   if (!scope) return unauthorized();
 
   const { id } = await context.params;
+  logger.info('media.complete.start', { mediaId: id });
+
   const deps = container();
 
   /**
@@ -62,6 +71,13 @@ export async function POST(
     ? await deps.invitations.findByIdInScope(media.invitationId, scope)
     : null;
 
+  logger.debug('media.complete.before_b2_head', {
+    mediaId: id,
+    storageKey: media.storageKey,
+    elapsedMs: Math.round(now() - startTime),
+  });
+
+  const b2StartTime = now();
   const result = await completeUpload(
     {
       actor: session.actor,
@@ -74,11 +90,43 @@ export async function POST(
       // Which adapter runs is `MEDIA_DISPATCH`, not this route's business
       // (ADR-0023). On an `inline` deployment this call *is* the encode, so
       // the response below is sent after the work rather than before it.
-      enqueue: (job) => dispatchMediaProcessing(job.mediaId),
+      enqueue: (job) => {
+        logger.debug('media.complete.before_dispatch', {
+          mediaId: id,
+          b2DurationMs: Math.round(now() - b2StartTime),
+          totalElapsedMs: Math.round(now() - startTime),
+        });
+        const dispatchStartTime = now();
+        const dispatchPromise = dispatchMediaProcessing(job.mediaId);
+        dispatchPromise
+          .then(() => {
+            logger.info('media.complete.dispatch_done', {
+              mediaId: id,
+              dispatchDurationMs: Math.round(now() - dispatchStartTime),
+              totalElapsedMs: Math.round(now() - startTime),
+            });
+          })
+          .catch((err) => {
+            logger.error('media.complete.dispatch_failed', {
+              mediaId: id,
+              dispatchDurationMs: Math.round(now() - dispatchStartTime),
+              error: err instanceof Error ? err.message : String(err),
+              totalElapsedMs: Math.round(now() - startTime),
+            });
+          });
+        return dispatchPromise;
+      },
     },
   );
 
   if (!result.ok) {
+    logger.warn('media.complete.validation_failed', {
+      mediaId: id,
+      code: result.code,
+      message: result.message,
+      elapsedMs: Math.round(now() - startTime),
+    });
+
     switch (result.code) {
       case 'NOT_FOUND':
         return notFound('Media');
@@ -99,6 +147,12 @@ export async function POST(
         return failure(403, 'FORBIDDEN', result.message);
     }
   }
+
+  logger.info('media.complete.success', {
+    mediaId: result.mediaId,
+    sizeBytes: result.sizeBytes,
+    totalElapsedMs: Math.round(now() - startTime),
+  });
 
   return ok({
     mediaId: result.mediaId,
