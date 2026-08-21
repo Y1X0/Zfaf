@@ -540,7 +540,7 @@ function wireDebugDisplay(root: Document): Cleanup {
   debugBox.style.cssText = `
     position: fixed;
     top: 8px;
-    right: 8px;
+    inset-inline-end: 8px;
     background: rgba(0, 0, 0, 0.8);
     color: #0f0;
     padding: 6px 10px;
