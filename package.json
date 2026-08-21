@@ -33,7 +33,8 @@
     "env:check": "node scripts/check-production-env.mjs",
     "backup:drill": "bash scripts/backup-restore-drill.sh",
     "docker:smoke": "bash scripts/docker-smoke.sh",
-    "verify:deployment": "bash scripts/verify-deployment.sh"
+    "verify:deployment": "bash scripts/verify-deployment.sh",
+    "migrations:check": "node scripts/check-pending-migrations.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
